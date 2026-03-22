@@ -100,8 +100,10 @@ while true; do
   STATE=$(nebius compute instance get --id $INSTANCE_ID --format json | jq -r '.status.state')
   echo "  State: $STATE"
   if [ "$STATE" = "RUNNING" ]; then
+    # Public IP includes /32 CIDR suffix — strip it
     PUBLIC_IP=$(nebius compute instance get --id $INSTANCE_ID --format json \
-      | jq -r '.status.network_interfaces[0].public_ip_address.address')
+      | jq -r '.status.network_interfaces[0].public_ip_address.address' \
+      | cut -d/ -f1)
     echo "VM ready! Public IP: $PUBLIC_IP"
     break
   fi
@@ -109,6 +111,8 @@ while true; do
 done
 
 # 7. SSH in (wait for cloud-init to finish)
+# Note: SSH username depends on cloud-init config. Default is "nebius" for
+# Nebius VMs, but this example uses "user" (set in cloud-init above).
 echo ""
 echo "SSH command: ssh user@${PUBLIC_IP}"
 echo "Wait ~2 min for cloud-init to complete before SSHing."

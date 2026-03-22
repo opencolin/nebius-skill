@@ -76,6 +76,12 @@ If the check fails, guide the user:
 - **Always use `--format json`** when running nebius commands programmatically. Parse output with `jq`.
 - **Check before creating** — use `list` commands to see if a resource already exists before creating a duplicate.
 - **Region awareness** — `eu-west1` uses `cpu-d3` (not `cpu-e2`). Always confirm which region the user is targeting.
+- **Disk types use underscores** — `network_ssd`, NOT `network-ssd`. Also `network_hdd`, `network_ssd_io_m3`.
+- **Image family flag** — use `--source-image-family-image-family` (double "image-family"), NOT `--source-image-family`.
+- **Minimum disk size** — ubuntu22.04-cuda12 requires at least 50 GiB. Using 30 GiB will fail.
+- **Multiple container ports** — use `--container-port 8080 --container-port 18789` to expose both health + dashboard.
+- **SSH username is `nebius`** — not `root`, `ubuntu`, `admin`, or `user`. This is the default for Nebius VMs and endpoints.
+- **Public IP includes `/32` suffix** — strip it: `jq -r '.status.network_interfaces[0].public_ip_address.address' | cut -d/ -f1`.
 
 ## Core Services
 
@@ -88,14 +94,18 @@ For detailed commands and parameters, see [references/ai-endpoints-reference.md]
 **Quick deploy (CPU-only, uses Token Factory for inference):**
 
 ```bash
+WEB_PASSWORD=$(openssl rand -base64 24)
 nebius ai endpoint create \
   --name my-endpoint \
   --image <REGISTRY_IMAGE> \
   --platform cpu-e2 \
   --container-port 8080 \
+  --container-port 18789 \
   --env "TOKEN_FACTORY_API_KEY=<key>" \
   --env "INFERENCE_MODEL=<model>" \
+  --env "OPENCLAW_WEB_PASSWORD=${WEB_PASSWORD}" \
   --public
+echo "Dashboard: http://<PUBLIC_IP>:18789/#token=${WEB_PASSWORD}"
 ```
 
 **GPU deploy (self-hosted inference):**
@@ -185,6 +195,52 @@ For complete step-by-step deployment workflows, see:
 
 - [examples/deploy-serverless-endpoint.md](examples/deploy-serverless-endpoint.md) - Deploy an AI agent as a serverless endpoint
 - [examples/deploy-gpu-vm.md](examples/deploy-gpu-vm.md) - Deploy a GPU VM with vLLM for self-hosted inference
+
+## OpenClaw Dashboard Access
+
+When deploying OpenClaw/NemoClaw endpoints, the gateway dashboard runs on port 18789:
+
+- **Expose the port**: Use `--container-port 18789` alongside `--container-port 8080`
+- **Set dashboard password**: `--env "OPENCLAW_WEB_PASSWORD=<random-token>"`
+- **Dashboard URL format**: `http://<IP>:18789/#token=<password>&gatewayUrl=ws://<IP>:18789`
+  - Token MUST be in the URL **hash** (`#token=`), NOT query string (`?token=`)
+  - `gatewayUrl` MUST accompany `token` or it becomes "pending" and is ignored
+- **Device pairing**: Each new browser requires pairing approval from the gateway host:
+  ```bash
+  # Inside the container:
+  openclaw devices approve --latest --token <gateway-token>
+  ```
+- **HTTPS required**: Dashboard needs secure context for device identity. Use localhost, self-signed cert, or Tailscale Serve.
+- **Config secrets are redacted**: `openclaw config get gateway.auth.token` returns `__OPENCLAW_REDACTED__`. Read raw JSON: `cat ~/.openclaw/openclaw.json`
+- **Gateway refuses `--auth none` with `--bind lan`**: Must use `--auth token` or `--auth password`
+- **SIGHUP kills the gateway**: No graceful reload. Must restart manually after config changes.
+
+## Inference Providers
+
+Token Factory is the default, but OpenRouter and HuggingFace also work (routed through Nebius GPUs):
+
+| Provider | Env Vars | Notes |
+|---|---|---|
+| Token Factory | `TOKEN_FACTORY_API_KEY`, `TOKEN_FACTORY_URL=https://api.tokenfactory.nebius.com/v1` | Nebius native API |
+| OpenRouter | `OPENROUTER_API_KEY`, `INFERENCE_URL=https://openrouter.ai/api/v1`, `OPENROUTER_PROVIDER_ONLY=nebius` | Restricted to Nebius provider |
+| HuggingFace | `HUGGINGFACE_API_KEY`, `HF_TOKEN=<key>`, `HUGGINGFACE_PROVIDER=nebius` | Provider set to Nebius |
+
+## Common Gotchas
+
+| Gotcha | Details |
+|---|---|
+| CLI install URL changed | Old `storage.ai.nebius.cloud` doesn't resolve. Use `storage.eu-north1.nebius.cloud/cli/install.sh` |
+| macOS binary on Linux | Copying `~/.nebius/bin/` from Mac to Linux gives `Exec format error`. Only copy config files, reinstall CLI on Linux. |
+| `--source-image-family` wrong | Correct flag is `--source-image-family-image-family` (double "image-family") |
+| Disk too small | ubuntu22.04-cuda12 needs minimum 50 GiB. 30 GiB fails with validation error. |
+| `network-ssd` wrong | Use underscores: `network_ssd`. Hyphens are rejected. |
+| `cpu-e2` in eu-west1 | Fails. eu-west1 only has `cpu-d3`. Check `nebius compute platform list`. |
+| Public IP has `/32` | `public_ip_address.address` returns `1.2.3.4/32`. Strip suffix with `cut -d/ -f1`. |
+| SSH user | Always `nebius` on endpoints/VMs, NOT `root`/`ubuntu`/`admin`. |
+| `nebius iam whoami` user name | Name is at `user_profile.attributes.name`, NOT `identity.display_name`. |
+| Session/profile scoping | `nebius iam project list` is scoped to active profile's parent. Use `--parent-id <tenant-id>` for cross-region. |
+| `nebius profile create` | Requires interactive input. Write directly to `~/.nebius/config.yaml` in scripts. |
+| `--force` in containers | Needs `fuser`/`lsof` (missing in minimal containers). Start without `--force` if port is free. |
 
 ## Safety Rules
 

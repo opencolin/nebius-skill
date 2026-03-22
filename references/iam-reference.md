@@ -14,13 +14,26 @@ nebius iam whoami --format json
 
 # Get current access token
 nebius iam get-access-token
+
+# Get user display name (note: it's deeply nested)
+nebius iam whoami --format json | jq -r '.user_profile.attributes.name'
+# NOT .identity.display_name — that field doesn't exist
 ```
 
 ## Profiles
 
 ```bash
-# Create a profile
+# Create a profile (interactive — not scriptable)
 nebius profile create --name <profile-name>
+
+# For scripted/automated profile creation, write directly to config:
+# Edit ~/.nebius/config.yaml and add under "profiles:":
+#   my-profile:
+#     endpoint: api.nebius.cloud
+#     auth-type: federation
+#     federation-endpoint: auth.nebius.com
+#     parent-id: <project-id>
+#     tenant-id: <tenant-id>
 
 # List profiles
 nebius profile list

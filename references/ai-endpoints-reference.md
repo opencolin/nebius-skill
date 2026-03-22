@@ -7,16 +7,22 @@
 Best for agent/orchestration workloads that don't need local GPU:
 
 ```bash
+WEB_PASSWORD=$(openssl rand -base64 24)
 nebius ai endpoint create \
   --name "<endpoint-name>" \
   --image "<REGISTRY_IMAGE>" \
   --platform cpu-e2 \
   --container-port 8080 \
+  --container-port 18789 \
   --env "TOKEN_FACTORY_API_KEY=<key>" \
   --env "TOKEN_FACTORY_URL=https://api.tokenfactory.nebius.com/v1" \
   --env "INFERENCE_MODEL=<model-name>" \
+  --env "OPENCLAW_WEB_PASSWORD=${WEB_PASSWORD}" \
   --public
+# Dashboard URL: http://<PUBLIC_IP>:18789/#token=${WEB_PASSWORD}&gatewayUrl=ws://<PUBLIC_IP>:18789
 ```
+
+**Note**: Multiple `--container-port` flags are supported. Port 8080 is the health check, port 18789 is the OpenClaw dashboard.
 
 ### GPU (self-hosted inference)
 
@@ -63,7 +69,7 @@ nebius ai endpoint create \
 | `--image` | Docker image (from Nebius registry or public) |
 | `--platform` | GPU/CPU platform (see GPU platforms table) |
 | `--preset` | Resource allocation (e.g., `1gpu-16vcpu-200gb`) |
-| `--container-port` | Port your container listens on |
+| `--container-port` | Port your container listens on (repeatable for multiple ports) |
 | `--container-command` | Override container entrypoint |
 | `--args` | Arguments to the container command |
 | `--disk-size` | Persistent disk size (e.g., `100Gi`) |

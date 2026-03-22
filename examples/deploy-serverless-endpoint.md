@@ -47,15 +47,24 @@ docker build -t $IMAGE .
 docker push $IMAGE
 
 # 5. Deploy endpoint (CPU-only)
+# Generate a dashboard password for the OpenClaw Control UI
+WEB_PASSWORD=$(openssl rand -base64 24)
+echo "Dashboard password: $WEB_PASSWORD"
+
 nebius ai endpoint create \
   --name "$ENDPOINT_NAME" \
   --image "$IMAGE" \
   --platform cpu-e2 \
   --container-port 8080 \
+  --container-port 18789 \
   --env "TOKEN_FACTORY_API_KEY=${TOKEN_FACTORY_KEY}" \
   --env "TOKEN_FACTORY_URL=https://api.tokenfactory.nebius.com/v1" \
   --env "INFERENCE_MODEL=${MODEL}" \
+  --env "OPENCLAW_WEB_PASSWORD=${WEB_PASSWORD}" \
   --public
+
+# Note: --container-port 18789 exposes the OpenClaw dashboard directly.
+# Access it at: http://<PUBLIC_IP>:18789/#token=${WEB_PASSWORD}&gatewayUrl=ws://<PUBLIC_IP>:18789
 
 # 6. Wait for endpoint to be ready
 ENDPOINT_ID=$(nebius ai endpoint get-by-name $ENDPOINT_NAME --format json | jq -r '.metadata.id')

@@ -17,10 +17,14 @@ nebius compute disk create \
 
 ### Available Image Families
 
-| Family | Description |
-|---|---|
-| `ubuntu22.04-cuda12` | Ubuntu 22.04 with CUDA 12 (recommended for GPU) |
-| `ubuntu22.04` | Ubuntu 22.04 (CPU only) |
+| Family | Description | Min Disk Size |
+|---|---|---|
+| `ubuntu22.04-cuda12` | Ubuntu 22.04 with CUDA 12 (recommended for GPU) | **50 GiB** |
+| `ubuntu22.04` | Ubuntu 22.04 (CPU only) | 10 GiB |
+
+**Critical**: The `--source-image-family-image-family` flag has a double "image-family" — this is correct, not a typo. Using `--source-image-family` alone will fail.
+
+**Critical**: Disk type must use underscores: `network_ssd`, NOT `network-ssd`.
 
 ## Create VM Instance
 
@@ -135,13 +139,18 @@ nebius compute platform list --format json
 After VM creation, get the public IP and SSH in:
 
 ```bash
-# Get public IP
+# Get public IP (strip the /32 CIDR suffix)
 PUBLIC_IP=$(nebius compute instance get --id <INSTANCE_ID> --format json \
-  | jq -r '.status.network_interfaces[0].public_ip_address.address')
+  | jq -r '.status.network_interfaces[0].public_ip_address.address' \
+  | cut -d/ -f1)
 
-# SSH to VM
-ssh user@${PUBLIC_IP}
+# SSH to VM — username is "nebius" (NOT root, ubuntu, admin, or user)
+ssh nebius@${PUBLIC_IP}
+# Or if using cloud-init with a custom user:
+ssh <your-cloud-init-user>@${PUBLIC_IP}
 ```
+
+**Important**: The default SSH username on Nebius VMs and AI endpoints is `nebius`. Cloud-init can override this with a custom user.
 
 ## Cost Considerations
 
