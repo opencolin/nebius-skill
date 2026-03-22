@@ -163,7 +163,7 @@ The SKILL.md uses a unified frontmatter that works with both platforms:
 
 ## Related Projects
 
-- [nemoclaw](https://github.com/colygon/nemoclaw) - Deployment toolkit for running OpenClaw/NemoClaw on Nebius
+- [openclaw-deploy](https://github.com/colygon/openclaw-deploy) - Deployment toolkit for running OpenClaw/NemoClaw on Nebius
 - [Nebius CLI docs](https://docs.nebius.com/cli/) - Official CLI documentation
 - [Nebius API](https://github.com/nebius/api) - gRPC API proto definitions and SDKs
 
