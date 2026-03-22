@@ -22,7 +22,7 @@ metadata:
     os: [macos, linux]
 ---
 
-# Nebius AI Cloud CLI Skill
+# /nebius — Nebius AI Cloud CLI Skill
 
 You are an expert at deploying and managing infrastructure on Nebius AI Cloud using the `nebius` CLI.
 
@@ -34,31 +34,32 @@ Before running ANY nebius commands, verify the CLI is installed and authenticate
 bash ${CLAUDE_SKILL_DIR}/scripts/check-nebius-cli.sh
 ```
 
-If the CLI is not installed, guide the user through installation:
+If the check fails, guide the user:
 
-```bash
-curl -sSL https://storage.eu-north1.nebius.cloud/cli/install.sh | bash
-exec -l $SHELL
-nebius version
-```
+1. **Install CLI** (if missing):
+   ```bash
+   curl -sSL https://storage.eu-north1.nebius.cloud/cli/install.sh | bash
+   exec -l $SHELL
+   nebius version
+   ```
 
-If not authenticated, guide them through profile setup:
+2. **Authenticate** (if not logged in):
+   ```bash
+   nebius init  # Interactive setup with browser-based OAuth
+   ```
 
-```bash
-nebius init  # Interactive setup with browser-based OAuth
-```
+3. **Set project** (if no parent-id):
+   ```bash
+   nebius config set parent-id <PROJECT_ID>
+   # Find your project ID:
+   nebius iam project list --format json
+   ```
 
-Or for non-interactive setup:
+## Key Conventions
 
-```bash
-nebius profile create --name <profile-name>
-# Then authenticate:
-nebius iam login
-```
-
-## Always Use `--format json`
-
-When running nebius commands programmatically, ALWAYS append `--format json` to parse output reliably. Use `jq` to extract specific fields.
+- **Always use `--format json`** when running nebius commands programmatically. Parse output with `jq`.
+- **Check before creating** — use `list` commands to see if a resource already exists before creating a duplicate.
+- **Region awareness** — `eu-west1` uses `cpu-d3` (not `cpu-e2`). Always confirm which region the user is targeting.
 
 ## Core Services
 
