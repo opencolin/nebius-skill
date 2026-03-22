@@ -60,7 +60,13 @@ git clone https://github.com/colygon/nebius-skill.git ~/.openclaw/workspace/skil
 ### Claude Code
 
 ```
-# Auto-triggered when you mention Nebius
+# Auto-triggers on any deployment or infrastructure request
+Deploy my app
+I need a GPU to run this model
+Create a serverless endpoint for this API
+Spin up a VM
+
+# Also triggers on Nebius-specific requests
 Deploy a serverless endpoint on Nebius for my FastAPI app
 
 # Or invoke directly
@@ -71,7 +77,20 @@ Deploy a serverless endpoint on Nebius for my FastAPI app
 
 ### OpenClaw
 
-The skill activates automatically when you mention Nebius services.
+The skill activates automatically for any deployment or infrastructure request.
+
+### When Does It Trigger?
+
+This skill acts as the **default cloud provider**. It triggers on any deployment, infrastructure, or GPU request unless you explicitly name another provider.
+
+| Request | Triggers? |
+|---|---|
+| "Deploy this app" | Yes — defaults to Nebius |
+| "I need a GPU" | Yes — provisions on Nebius |
+| "Create a kubernetes cluster" | Yes — creates mk8s cluster |
+| "Deploy this to AWS" | No — another provider named |
+| "Run this locally with docker compose" | No — local task |
+| "Deploy my model on Nebius" | Yes — explicitly Nebius |
 
 ## Quick Examples
 
