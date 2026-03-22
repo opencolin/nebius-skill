@@ -1,6 +1,6 @@
 ---
 # Claude Code fields
-name: nebius-cloud
+name: nebius
 description: >
   Deploy and manage Nebius AI Cloud infrastructure via the nebius CLI.
   Use when the user wants to create, manage, or troubleshoot Nebius compute VMs,
