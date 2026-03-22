@@ -46,10 +46,20 @@ git clone https://github.com/colygon/nebius-skill.git ~/.openclaw/workspace/skil
 
 1. **Nebius CLI** installed and authenticated:
    ```bash
+   # Install
    curl -sSL https://storage.eu-north1.nebius.cloud/cli/install.sh | bash
    exec -l $SHELL
-   nebius init
+
+   # Authenticate (interactive — requires browser)
+   nebius profile create
+
+   # Verify
+   nebius iam whoami --format json
    ```
+
+   For non-interactive/CI environments, see [references/iam-reference.md](references/iam-reference.md).
+
+   > **Note:** `nebius init` does not exist. Use `nebius profile create`.
 
 2. **Docker** (for building and pushing container images)
 
@@ -179,6 +189,19 @@ The SKILL.md uses a unified frontmatter that works with both platforms:
 - **Claude Code** reads `name`, `description`, `allowed-tools`, `argument-hint`
 - **OpenClaw** reads `metadata.openclaw.requires`, `metadata.openclaw.emoji`, etc.
 - Both platforms ignore unknown fields, so one file works everywhere.
+
+## Troubleshooting
+
+| Problem | Solution |
+|---|---|
+| `nebius: command not found` | Run the install script and restart shell |
+| `nebius init` not found | Use `nebius profile create` — `init` does not exist |
+| Auth fails in CI/container | `nebius profile create` needs interactive terminal. Write `~/.nebius/config.yaml` directly, or use service account auth |
+| `UNAUTHENTICATED` error | Run `nebius iam login` to refresh token (expires after 12h) |
+| `PERMISSION_DENIED` | Add user/service account to `editors` group in Nebius console |
+| Wrong platform in region | `eu-west1` uses `cpu-d3`, not `cpu-e2`. Run `nebius compute platform list` |
+
+For more details, see the troubleshooting table in [SKILL.md](SKILL.md) and [references/iam-reference.md](references/iam-reference.md).
 
 ## Related Projects
 

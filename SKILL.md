@@ -8,7 +8,7 @@ description: >
   Always use for mentions of "nebius", "nebius cloud", mk8s, soperator, or token factory.
   Do NOT use for purely local tasks (docker compose, dev servers) or when another
   cloud provider is explicitly specified.
-version: 1.0.0
+version: 1.1.0
 
 # Claude Code fields (ignored by OpenClaw)
 allowed-tools: Bash(nebius *), Bash(kubectl *), Bash(helm *), Bash(docker *), Bash(ssh *), Bash(curl *), Read, Grep, Glob
@@ -62,16 +62,46 @@ If the check fails, guide the user:
    nebius version
    ```
 
-2. **Authenticate** (if not logged in):
+2. **Authenticate** — choose based on environment:
+
+   **Interactive (has browser):**
    ```bash
-   nebius init  # Interactive setup with browser-based OAuth
+   nebius profile create
+   # Follow prompts: profile name, accept defaults, login via browser
+   nebius iam login  # If token expired later
+   ```
+
+   **Non-interactive (CI/CD, containers, headless):**
+   ```bash
+   # Option A: Write config file directly
+   mkdir -p ~/.nebius
+   cat > ~/.nebius/config.yaml << 'EOF'
+   current-profile: default
+   profiles:
+     default:
+       endpoint: api.nebius.cloud
+       auth-type: federation
+       federation-endpoint: auth.nebius.com
+       parent-id: <PROJECT_ID>
+       tenant-id: <TENANT_ID>
+   EOF
+   nebius iam login  # One-time browser auth, then token is cached
+
+   # Option B: Service account (fully automated)
+   # See references/iam-reference.md for service account setup
    ```
 
 3. **Set project** (if no parent-id):
    ```bash
    nebius config set parent-id <PROJECT_ID>
    # Find your project ID:
-   nebius iam project list --format json
+   nebius iam project list --format json | jq -r '.items[].metadata.id'
+   ```
+
+4. **Validate connectivity** (quick smoke test):
+   ```bash
+   nebius iam whoami --format json
+   nebius ai endpoint list --format json  # Should return empty list or endpoints
    ```
 
 ## Key Conventions
@@ -244,6 +274,23 @@ Token Factory is the default, but OpenRouter and HuggingFace also work (routed t
 | Session/profile scoping | `nebius iam project list` is scoped to active profile's parent. Use `--parent-id <tenant-id>` for cross-region. |
 | `nebius profile create` | Requires interactive input. Write directly to `~/.nebius/config.yaml` in scripts. |
 | `--force` in containers | Needs `fuser`/`lsof` (missing in minimal containers). Start without `--force` if port is free. |
+
+## Troubleshooting
+
+| Problem | Solution |
+|---|---|
+| `nebius: command not found` | Install: `curl -sSL https://storage.eu-north1.nebius.cloud/cli/install.sh \| bash && exec -l $SHELL` |
+| `UNAUTHENTICATED` (exit code 7) | Run `nebius iam login` or check service account key |
+| `PERMISSION_DENIED` (exit code 15) | Check IAM group membership. User needs `editors` group. |
+| `NOT_FOUND` (exit code 13) | Verify resource ID and that you're in the correct project/profile |
+| `RESOURCE_EXHAUSTED` / `QuotaFailure` (exit code 24) | Request quota increase in Nebius console |
+| `NOT_ENOUGH_RESOURCES` (exit code 25) | Try a different region or smaller preset |
+| `nebius profile create` hangs | Requires interactive terminal. Write `~/.nebius/config.yaml` directly in scripts. |
+| `nebius init` not found | Use `nebius profile create` instead — `init` does not exist. |
+| Can't authenticate in container/CI | Use service account auth. See [references/iam-reference.md](references/iam-reference.md). |
+| Wrong region platform | `eu-west1` uses `cpu-d3`, not `cpu-e2`. Run `nebius compute platform list --format json`. |
+
+For full authentication options, see [Nebius CLI docs](https://docs.nebius.com/cli/configure) and [references/iam-reference.md](references/iam-reference.md).
 
 ## Safety Rules
 
