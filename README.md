@@ -1,4 +1,4 @@
-# nebius-cloud-skill
+# nebius-skill
 
 A dual-compatible skill for **Claude Code** and **OpenClaw** that enables AI agents to deploy and manage infrastructure on [Nebius AI Cloud](https://nebius.com) via the `nebius` CLI.
 
@@ -25,13 +25,13 @@ Invoke with `/nebius` in Claude Code, or let it auto-trigger when you mention Ne
 Clone into your personal skills directory:
 
 ```bash
-git clone https://github.com/colygon/nebius-cloud-skill.git ~/.claude/skills/nebius
+git clone https://github.com/colygon/nebius-skill.git ~/.claude/skills/nebius
 ```
 
 Or for project-level use:
 
 ```bash
-git clone https://github.com/colygon/nebius-cloud-skill.git .claude/skills/nebius
+git clone https://github.com/colygon/nebius-skill.git .claude/skills/nebius
 ```
 
 ### OpenClaw
@@ -39,7 +39,7 @@ git clone https://github.com/colygon/nebius-cloud-skill.git .claude/skills/nebiu
 Clone into your workspace skills:
 
 ```bash
-git clone https://github.com/colygon/nebius-cloud-skill.git ~/.openclaw/workspace/skills/nebius
+git clone https://github.com/colygon/nebius-skill.git ~/.openclaw/workspace/skills/nebius
 ```
 
 ## Prerequisites
@@ -128,7 +128,7 @@ See the [examples/](examples/) directory for complete end-to-end deployment work
 ## Project Structure
 
 ```
-nebius-cloud-skill/
+nebius-skill/
 ├── SKILL.md                           # Main skill definition (dual-compatible)
 ├── references/
 │   ├── ai-endpoints-reference.md      # Serverless endpoint commands
