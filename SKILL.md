@@ -229,24 +229,86 @@ For complete step-by-step deployment workflows, see:
 - [examples/deploy-serverless-endpoint.md](examples/deploy-serverless-endpoint.md) - Deploy an AI agent as a serverless endpoint
 - [examples/deploy-gpu-vm.md](examples/deploy-gpu-vm.md) - Deploy a GPU VM with vLLM for self-hosted inference
 
-## OpenClaw Dashboard Access
+## OpenClaw / NemoClaw Deployment
 
-When deploying OpenClaw/NemoClaw endpoints, the gateway dashboard runs on port 18789:
+When deploying OpenClaw/NemoClaw endpoints, the gateway dashboard runs on port 18789.
+
+### Pre-built Public Images
+
+Pre-built images are available on GitHub Container Registry (no build required):
+```bash
+# OpenClaw only (lightweight)
+ghcr.io/colygon/openclaw-serverless:latest
+
+# NemoClaw (OpenClaw + NVIDIA NemoClaw plugin)
+ghcr.io/colygon/nemoclaw-serverless:latest
+```
+
+### Gateway Configuration (openclaw.json)
+
+The entrypoint script generates `~/.openclaw/openclaw.json` at container startup. Critical rules:
+
+- **Token must be in BOTH config file AND env var**: Setting only the env var is unreliable after manual gateway restarts. The config file is the source of truth.
+  ```json
+  "gateway": {
+    "auth": { "mode": "token", "token": "${OPENCLAW_GATEWAY_TOKEN}" }
+  }
+  ```
+- **Map `OPENCLAW_WEB_PASSWORD` → `OPENCLAW_GATEWAY_TOKEN`**: The deploy UI sets `OPENCLAW_WEB_PASSWORD`, but the gateway reads `OPENCLAW_GATEWAY_TOKEN`. The entrypoint must map them:
+  ```bash
+  export OPENCLAW_GATEWAY_TOKEN="${OPENCLAW_WEB_PASSWORD:-${GATEWAY_TOKEN:-openclaw-$(hostname)}}"
+  ```
+- **Do NOT add a `plugins` key**: `"plugins": { "nemoclaw": { "enabled": true } }` is NOT a valid OpenClaw config key and crashes the gateway with `"Config invalid - plugins: Unrecognized key"`. NemoClaw is loaded automatically when installed globally via npm.
+- **`allowedOrigins: ["*"]`**: Required for dashboard access through reverse proxies:
+  ```json
+  "gateway": {
+    "controlUi": { "allowedOrigins": ["*"] }
+  }
+  ```
+- **Model IDs must use Token Factory format**: Use `zai-org/GLM-5`, NOT `THUDM/GLM-4-9B-0414`. Check available models: `curl -s https://api.tokenfactory.nebius.com/v1/models -H "Authorization: Bearer $KEY" | jq '.data[].id'`
+
+### Dashboard Access
 
 - **Expose the port**: Use `--container-port 18789` alongside `--container-port 8080`
 - **Set dashboard password**: `--env "OPENCLAW_WEB_PASSWORD=<random-token>"`
 - **Dashboard URL format**: `http://<IP>:18789/#token=<password>&gatewayUrl=ws://<IP>:18789`
   - Token MUST be in the URL **hash** (`#token=`), NOT query string (`?token=`)
   - `gatewayUrl` MUST accompany `token` or it becomes "pending" and is ignored
-- **Device pairing**: Each new browser requires pairing approval from the gateway host:
+- **Device pairing**: Each new browser/TUI requires pairing approval from the gateway host:
   ```bash
-  # Inside the container:
-  openclaw devices approve --latest --token <gateway-token>
+  # SSH into the endpoint and approve inside the container:
+  ssh nebius@<IP> "sudo docker exec \$(sudo docker ps -q | head -1) openclaw devices approve --latest"
   ```
-- **HTTPS required**: Dashboard needs secure context for device identity. Use localhost, self-signed cert, or Tailscale Serve.
+- **HTTPS required for browser**: Dashboard needs secure context for device identity. Options:
+  - Self-signed cert via nginx reverse proxy
+  - SSH tunnel: `ssh -f -N -L 28789:<endpoint-ip>:18789 nebius@<vm-ip>` then access `http://localhost:28789`
+  - Tailscale Serve/Funnel
+
+### TUI Connection
+
+```bash
+# Via SSH tunnel (recommended — avoids insecure WebSocket warning):
+ssh -f -N -L 28789:<endpoint-ip>:18789 nebius@<vm-ip>
+openclaw tui --url ws://localhost:28789 --token <gateway-token>
+
+# Direct (requires env var to bypass security check):
+OPENCLAW_ALLOW_INSECURE_PRIVATE_WS=1 openclaw tui --url ws://<IP>:18789 --token <token>
+```
+
+Note: Port 18789 on localhost may conflict with a local OpenClaw gateway. Use a different port (e.g., 28789).
+
+### Gateway Gotchas
+
 - **Config secrets are redacted**: `openclaw config get gateway.auth.token` returns `__OPENCLAW_REDACTED__`. Read raw JSON: `cat ~/.openclaw/openclaw.json`
 - **Gateway refuses `--auth none` with `--bind lan`**: Must use `--auth token` or `--auth password`
 - **SIGHUP kills the gateway**: No graceful reload. Must restart manually after config changes.
+- **`--force` needs `fuser`/`lsof`**: Minimal containers lack these. Start without `--force` if port is free.
+
+### Docker Build Notes (NemoClaw)
+
+- **Must use `node:22`** (not `node:22-slim`): NemoClaw's `@whiskeysockets/baileys` dependency needs build tools (python3, make, gcc) unavailable in slim.
+- **Use `--ignore-scripts`**: `npm install -g git+https://github.com/NVIDIA/NemoClaw.git --ignore-scripts` — the baileys post-install script fails inside Docker BuildKit.
+- **Build on native amd64**: Cross-compiling ARM → amd64 is very slow. Build on a Nebius VM for 5x faster builds.
 
 ## Inference Providers
 
@@ -274,6 +336,15 @@ Token Factory is the default, but OpenRouter and HuggingFace also work (routed t
 | Session/profile scoping | `nebius iam project list` is scoped to active profile's parent. Use `--parent-id <tenant-id>` for cross-region. |
 | `nebius profile create` | Requires interactive input. Write directly to `~/.nebius/config.yaml` in scripts. |
 | `--force` in containers | Needs `fuser`/`lsof` (missing in minimal containers). Start without `--force` if port is free. |
+| Federation auth on headless VMs | `nebius iam get-access-token` opens a browser on headless VMs. Use **service accounts** instead. |
+| Service account key size | Must be **4096-bit RSA** (`openssl genrsa 4096`). 2048-bit is rejected. |
+| SA registry push denied | Service account needs `editors` group membership: `nebius iam group-membership create --parent-id <editors-group-id> --member-id <sa-id>` |
+| SA config on VM | Set `auth-type: service account`, `service-account-id`, `public-key-id`, and `private-key-file-path` in `~/.nebius/config.yaml`. Remove Mac paths when copying config to Linux. |
+| Public IP quota | Default limit is 3 public IPs per tenant. Delete unused endpoints to free IPs. |
+| SSH keys at creation only | `--ssh-key` must be passed during `nebius ai endpoint create`. Cannot add SSH keys after creation. Generate `.pub` from private key: `ssh-keygen -y -f key > key.pub` |
+| Registry image list | `nebius registry image list --parent-id <registry-id>` lists images. Use `nebius registry list` to find registry IDs. |
+| Token Factory model IDs | Use `zai-org/GLM-5`, NOT `THUDM/GLM-4-9B-0414`. List models: `curl -s https://api.tokenfactory.nebius.com/v1/models -H "Authorization: Bearer $KEY"` |
+| `plugins` key in openclaw.json | Invalid and crashes gateway. NemoClaw is auto-loaded via npm global install. |
 
 ## Troubleshooting
 
@@ -289,6 +360,13 @@ Token Factory is the default, but OpenRouter and HuggingFace also work (routed t
 | `nebius init` not found | Use `nebius profile create` instead — `init` does not exist. |
 | Can't authenticate in container/CI | Use service account auth. See [references/iam-reference.md](references/iam-reference.md). |
 | Wrong region platform | `eu-west1` uses `cpu-d3`, not `cpu-e2`. Run `nebius compute platform list --format json`. |
+| Federation auth expires on VM | Token expires, `nebius iam get-access-token` opens browser. Create a service account with 4096-bit RSA key, add to `editors` group, update `~/.nebius/config.yaml` with `auth-type: service account`. |
+| `docker push` denied | Service account needs `editors` group. Find group: `nebius iam group list --parent-id <tenant-id>`. Add SA: `nebius iam group-membership create --parent-id <editors-group-id> --member-id <sa-id>`. |
+| Public IP quota exceeded | Default is 3 IPs per tenant. Delete unused endpoints: `nebius ai endpoint delete <id>`. |
+| OpenClaw gateway token mismatch | Token must be in config file (`gateway.auth.token`), not just env var. After manual restart, env may be lost. |
+| OpenClaw "Config invalid" | Remove `plugins` key from `openclaw.json`. Only recognized top-level keys: `agents`, `models`, `gateway`, `channels`. |
+| OpenClaw "pairing required" | Run `openclaw devices approve --latest` inside the container. Each new client needs approval. |
+| OpenClaw 404 on inference | Wrong model ID format. Token Factory uses `zai-org/GLM-5`, not HuggingFace format `THUDM/GLM-4-9B-0414`. |
 
 For full authentication options, see [Nebius CLI docs](https://docs.nebius.com/cli/configure) and [references/iam-reference.md](references/iam-reference.md).
 
