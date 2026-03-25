@@ -242,21 +242,95 @@ For full SDK reference, authentication patterns, and all gRPC endpoints, see [re
 
 For complete step-by-step deployment workflows, see:
 
-- [examples/deploy-serverless-endpoint.md](examples/deploy-serverless-endpoint.md) - Deploy an AI agent as a serverless endpoint
+- [examples/deploy-openclaw.md](examples/deploy-openclaw.md) - **Deploy OpenClaw/NemoClaw to Nebius serverless** (quickest path)
+- [examples/deploy-serverless-endpoint.md](examples/deploy-serverless-endpoint.md) - Deploy a custom AI agent as a serverless endpoint
 - [examples/deploy-gpu-vm.md](examples/deploy-gpu-vm.md) - Deploy a GPU VM with vLLM for self-hosted inference
 
 ## OpenClaw / NemoClaw Deployment
 
-When deploying OpenClaw/NemoClaw endpoints, the gateway dashboard runs on port 18789.
+OpenClaw is an open-source AI agent platform. NemoClaw is an NVIDIA plugin that wraps OpenClaw, adding sandbox execution and enhanced planning — ideal for GPU endpoints with local models.
+
+### Step-by-Step: Deploy OpenClaw to Nebius Serverless
+
+When the user asks to deploy OpenClaw (or an AI agent), follow these steps:
+
+**Step 1. Choose image and model:**
+```bash
+# OpenClaw (CPU, lightweight, Token Factory inference):
+IMAGE="ghcr.io/colygon/openclaw-serverless:latest"
+MODEL="zai-org/GLM-5"   # or: deepseek-ai/DeepSeek-R1-0528, MiniMaxAI/MiniMax-M2.5, zai-org/GLM-4.5
+
+# NemoClaw (GPU, local model, NVIDIA plugin):
+IMAGE="ghcr.io/colygon/nemoclaw-serverless:latest"
+```
+
+**Step 2. Get a Token Factory API key** (if using Token Factory):
+```bash
+# Check if user has a key in MysteryBox:
+nebius mysterybox secret list --format json | jq '.items[] | {name: .metadata.name, id: .metadata.id}'
+# Retrieve key from MysteryBox:
+nebius mysterybox payload get --secret-id <SECRET_ID> --format json | jq -r '.data[0].string_value'
+# Or ask user for their key from https://tokenfactory.nebius.com
+```
+
+**Step 3. Determine region and CPU platform:**
+```bash
+# eu-north1 (Finland) → cpu-e2    eu-west1 (Paris) → cpu-d3    us-central1 (US) → cpu-e2
+REGION="eu-north1"
+PLATFORM="cpu-e2"
+PRESET="2vcpu-8gb"
+```
+
+**Step 4. Generate a gateway password:**
+```bash
+PASSWORD=$(openssl rand -hex 16)
+echo "Dashboard password: $PASSWORD"  # Save this — needed to connect
+```
+
+**Step 5. Create the endpoint:**
+```bash
+nebius ai endpoint create \
+  --name openclaw-agent \
+  --image "$IMAGE" \
+  --platform "$PLATFORM" \
+  --preset "$PRESET" \
+  --container-port 8080 \
+  --container-port 18789 \
+  --disk-size 250Gi \
+  --env "TOKEN_FACTORY_API_KEY={user's key}" \
+  --env "TOKEN_FACTORY_URL=https://api.tokenfactory.nebius.com/v1" \
+  --env "INFERENCE_MODEL=$MODEL" \
+  --env "OPENCLAW_WEB_PASSWORD=$PASSWORD" \
+  --public \
+  --ssh-key "$(cat ~/.ssh/id_ed25519.pub 2>/dev/null || echo '')" \
+  --format json
+```
+
+**Step 6. Wait for RUNNING state:**
+```bash
+# Poll until ready (typically 1-3 minutes):
+nebius ai endpoint get <ENDPOINT_ID> --format json | jq '{state: .status.state, ip: .status.instances[0].public_ip}'
+```
+
+**Step 7. Verify the deployment:**
+```bash
+curl http://<PUBLIC_IP>:8080
+# Expected: {"status":"healthy","service":"openclaw-serverless","model":"zai-org/GLM-5",...}
+```
+
+**Step 8. Tell the user how to connect:**
+- Dashboard: `http://<IP>:18789/#token=<PASSWORD>&gatewayUrl=ws://<IP>:18789`
+- TUI: `ssh -f -N -L 28789:<IP>:18789 nebius@<IP> && openclaw tui --url ws://localhost:28789 --token <PASSWORD>`
+- Device pairing: `ssh nebius@<IP> "sudo docker exec $(sudo docker ps -q | head -1) openclaw devices approve --latest"`
 
 ### Pre-built Public Images
 
 Pre-built images are available on GitHub Container Registry (no build required):
 ```bash
-# OpenClaw only (lightweight)
+# OpenClaw only (lightweight, ~400 MB, CPU)
 ghcr.io/colygon/openclaw-serverless:latest
 
-# NemoClaw (OpenClaw + NVIDIA NemoClaw plugin)
+# NemoClaw (OpenClaw + NVIDIA plugin, ~1.1 GB, GPU-ready)
 ghcr.io/colygon/nemoclaw-serverless:latest
 ```
 
