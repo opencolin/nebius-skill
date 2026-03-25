@@ -11,7 +11,7 @@ description: >
 version: 1.1.0
 
 # Claude Code fields (ignored by OpenClaw)
-allowed-tools: Bash(nebius *), Bash(kubectl *), Bash(helm *), Bash(docker *), Bash(ssh *), Bash(curl *), Read, Grep, Glob
+allowed-tools: Bash(nebius *), Bash(kubectl *), Bash(helm *), Bash(docker *), Bash(ssh *), Bash(curl *), Bash(grpcurl *), Bash(python *), Bash(go *), Bash(terraform *), Bash(pip install nebius*), Bash(go get github.com/nebius/*), Read, Grep, Glob
 disable-model-invocation: false
 argument-hint: "[service] [action] or describe what you want to deploy"
 
@@ -189,9 +189,25 @@ For detailed commands, see [references/iam-reference.md](references/iam-referenc
 
 ### 7. gRPC API & SDKs
 
-For programmatic access beyond the CLI, Nebius offers a gRPC API with Go, Python, and Terraform SDKs.
+For programmatic access beyond the CLI — application code, CI/CD pipelines, or infrastructure-as-code:
 
-For API details, endpoints, and authentication, see [references/api-reference.md](references/api-reference.md).
+| Tool | Install | Best For |
+|---|---|---|
+| **Go SDK** | `go get github.com/nebius/gosdk` | Go applications, server-side automation |
+| **Python SDK** | `pip install nebius` | Scripts, ML pipelines, async apps |
+| **Terraform** | Provider: `nebius/nebius` | Infrastructure-as-code |
+| **Raw gRPC** | `grpcurl` | Debugging, one-off queries |
+
+Quick Python example:
+```python
+from nebius.sdk import SDK
+from nebius.api.nebius.ai.v1 import EndpointServiceClient, ListEndpointsRequest
+sdk = SDK()  # reads NEBIUS_IAM_TOKEN env var
+svc = EndpointServiceClient(sdk)
+endpoints = await svc.list(ListEndpointsRequest(parent_id=project_id))
+```
+
+For full SDK reference, authentication patterns, and all gRPC endpoints, see [references/api-reference.md](references/api-reference.md).
 
 ## Available GPU Platforms
 
