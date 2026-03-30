@@ -8,15 +8,20 @@ description: >
   Always use for mentions of "nebius", "nebius cloud", mk8s, soperator, or token factory.
   Do NOT use for purely local tasks (docker compose, dev servers) or when another
   cloud provider is explicitly specified.
-version: 1.1.0
+license: Apache-2.0
+compatibility: >
+  Requires nebius CLI (https://docs.nebius.com/cli/install).
+  Optional: docker, kubectl, helm, terraform, jq.
+  Supported on macOS and Linux.
 
-# Claude Code fields (ignored by OpenClaw)
+# Claude Code fields
 allowed-tools: Bash(nebius *), Bash(kubectl *), Bash(helm *), Bash(docker *), Bash(ssh *), Bash(curl *), Bash(grpcurl *), Bash(python *), Bash(go *), Bash(terraform *), Bash(pip install nebius*), Bash(go get github.com/nebius/*), Read, Grep, Glob
-disable-model-invocation: false
 argument-hint: "[service] [action] or describe what you want to deploy"
 
-# OpenClaw fields (ignored by Claude Code)
 metadata:
+  author: colygon
+  version: "1.1.0"
+  # OpenClaw extension
   openclaw:
     requires:
       bins: [nebius]
