@@ -23,6 +23,13 @@ ENDPOINT_NAME="my-agent"
 TOKEN_FACTORY_KEY="<your-token-factory-api-key>"
 MODEL="deepseek-ai/DeepSeek-R1-0528"
 
+# Token Factory URL — US region uses a different endpoint:
+if [[ "$REGION" == "us-central1" ]]; then
+  TOKEN_FACTORY_URL="https://api.tokenfactory.us-central1.nebius.com/v1"
+else
+  TOKEN_FACTORY_URL="https://api.tokenfactory.nebius.com/v1"
+fi
+
 # 2. Check for existing registry or create one
 REGISTRY_ID=$(nebius registry list --format json \
   | jq -r '.items[] | select(.metadata.name=="my-registry") | .metadata.id')
@@ -58,7 +65,7 @@ nebius ai endpoint create \
   --container-port 8080 \
   --container-port 18789 \
   --env "TOKEN_FACTORY_API_KEY=${TOKEN_FACTORY_KEY}" \
-  --env "TOKEN_FACTORY_URL=https://api.tokenfactory.nebius.com/v1" \
+  --env "TOKEN_FACTORY_URL=${TOKEN_FACTORY_URL}" \
   --env "INFERENCE_MODEL=${MODEL}" \
   --env "OPENCLAW_WEB_PASSWORD=${WEB_PASSWORD}" \
   --public

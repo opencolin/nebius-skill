@@ -16,28 +16,37 @@ TF_KEY=$(nebius mysterybox payload get --secret-id <SECRET_ID> --format json \
 # Option B: Set manually from https://tokenfactory.nebius.com:
 TF_KEY="v1.xxx..."
 
-# 3. Generate a gateway password
+# 3. Set region and Token Factory URL
+REGION="eu-north1"    # or eu-west1, us-central1
+PLATFORM="cpu-e2"     # eu-west1 uses cpu-d3
+if [[ "$REGION" == "us-central1" ]]; then
+  TOKEN_FACTORY_URL="https://api.tokenfactory.us-central1.nebius.com/v1"
+else
+  TOKEN_FACTORY_URL="https://api.tokenfactory.nebius.com/v1"
+fi
+
+# 4. Generate a gateway password
 PASSWORD=$(openssl rand -hex 16)
 echo "Save this password: $PASSWORD"
 
-# 4. Deploy
+# 5. Deploy
 nebius ai endpoint create \
   --name openclaw-agent \
   --image ghcr.io/colygon/openclaw-serverless:latest \
-  --platform cpu-e2 \
+  --platform $PLATFORM \
   --preset 2vcpu-8gb \
   --container-port 8080 \
   --container-port 18789 \
   --disk-size 250Gi \
   --env "TOKEN_FACTORY_API_KEY=${TF_KEY}" \
-  --env "TOKEN_FACTORY_URL=https://api.tokenfactory.nebius.com/v1" \
+  --env "TOKEN_FACTORY_URL=${TOKEN_FACTORY_URL}" \
   --env "INFERENCE_MODEL=${MODEL}" \
   --env "OPENCLAW_WEB_PASSWORD=${PASSWORD}" \
   --public \
   --ssh-key "$(cat ~/.ssh/id_ed25519.pub 2>/dev/null || echo '')" \
   --format json
 
-# 5. Wait for RUNNING
+# 6. Wait for RUNNING
 ENDPOINT_ID=$(nebius ai endpoint get-by-name openclaw-agent --format json | jq -r '.metadata.id')
 while true; do
   STATE=$(nebius ai endpoint get $ENDPOINT_ID --format json | jq -r '.status.state')
@@ -46,12 +55,12 @@ while true; do
   sleep 10
 done
 
-# 6. Get the public IP
+# 7. Get the public IP
 IP=$(nebius ai endpoint get $ENDPOINT_ID --format json \
   | jq -r '.status.instances[0].public_ip' | cut -d/ -f1)
 echo "Endpoint IP: $IP"
 
-# 7. Verify
+# 8. Verify
 curl http://$IP:8080
 # Expected: {"status":"healthy","service":"openclaw-serverless","model":"zai-org/GLM-5",...}
 ```
@@ -77,6 +86,31 @@ http://<IP>:18789/#token=<PASSWORD>&gatewayUrl=ws://<IP>:18789
 
 Note: Browser requires HTTPS for device identity. Use SSH tunnel (`http://localhost:28789`) or set up a reverse proxy with a self-signed cert.
 
+## Configure Nebius Provider Plugin
+
+After deployment, install the Nebius provider plugin to access 44+ open-source models via Token Factory:
+
+```bash
+# Install
+openclaw plugins install clawhub:@colygon/openclaw-nebius
+
+# Set API key (both needed)
+launchctl setenv NEBIUS_API_KEY "v1.YOUR_KEY_HERE"
+# Also add to ~/.openclaw/agents/main/agent/auth-profiles.json (see SKILL.md)
+
+# Enable and restart
+openclaw config set plugins.allow '["nebius"]'
+openclaw gateway restart
+
+# Verify
+openclaw models list --provider nebius
+
+# Optional: set default model
+openclaw config set agents.defaults.model.primary "nebius/deepseek-ai/DeepSeek-V3.2"
+```
+
+Always use the `nebius/` prefix for model names (e.g., `nebius/zai-org/GLM-5`). See the [plugin repo](https://github.com/colygon/openclaw-nebius-plugin) for the full model catalog and pricing.
+
 ## Deploy NemoClaw (NVIDIA Plugin)
 
 NemoClaw wraps OpenClaw with NVIDIA's enhanced agent capabilities. Ideal for GPU endpoints with local models.
@@ -92,7 +126,7 @@ nebius ai endpoint create \
   --container-port 18789 \
   --disk-size 250Gi \
   --env "TOKEN_FACTORY_API_KEY=${TF_KEY}" \
-  --env "TOKEN_FACTORY_URL=https://api.tokenfactory.nebius.com/v1" \
+  --env "TOKEN_FACTORY_URL=${TOKEN_FACTORY_URL}" \
   --env "INFERENCE_MODEL=${MODEL}" \
   --env "OPENCLAW_WEB_PASSWORD=${PASSWORD}" \
   --public \
@@ -106,13 +140,13 @@ nebius ai endpoint create \
 |--------|----------|-------|
 | `eu-north1` (Finland) | `cpu-e2` | Default region |
 | `eu-west1` (Paris) | `cpu-d3` | Different CPU — must match! |
-| `us-central1` (US) | `cpu-e2` | US-based workloads |
+| `us-central1` (US) | `cpu-e2` | US-based workloads. Token Factory URL: `api.tokenfactory.us-central1.nebius.com` |
 
 ## Token Factory Models
 
 ```bash
 # List all available models:
-curl -s https://api.tokenfactory.nebius.com/v1/models \
+curl -s $TOKEN_FACTORY_URL/models \
   -H "Authorization: Bearer $TF_KEY" | jq '.data[].id'
 ```
 

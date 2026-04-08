@@ -15,7 +15,9 @@ nebius ai endpoint create \
   --container-port 8080 \
   --container-port 18789 \
   --env "TOKEN_FACTORY_API_KEY=<key>" \
-  --env "TOKEN_FACTORY_URL=https://api.tokenfactory.nebius.com/v1" \
+  --env "TOKEN_FACTORY_URL=<TOKEN_FACTORY_URL>" \
+# EU: https://api.tokenfactory.nebius.com/v1
+# US (us-central1): https://api.tokenfactory.us-central1.nebius.com/v1
   --env "INFERENCE_MODEL=<model-name>" \
   --env "OPENCLAW_WEB_PASSWORD=${WEB_PASSWORD}" \
   --public

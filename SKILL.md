@@ -278,12 +278,19 @@ nebius mysterybox payload get --secret-id <SECRET_ID> --format json | jq -r '.da
 # Or ask user for their key from https://tokenfactory.nebius.com
 ```
 
-**Step 3. Determine region and CPU platform:**
+**Step 3. Determine region, CPU platform, and Token Factory URL:**
 ```bash
 # eu-north1 (Finland) → cpu-e2    eu-west1 (Paris) → cpu-d3    us-central1 (US) → cpu-e2
 REGION="eu-north1"
 PLATFORM="cpu-e2"
 PRESET="2vcpu-8gb"
+
+# Token Factory URL — US region uses a different endpoint:
+if [[ "$REGION" == "us-central1" ]]; then
+  TOKEN_FACTORY_URL="https://api.tokenfactory.us-central1.nebius.com/v1"
+else
+  TOKEN_FACTORY_URL="https://api.tokenfactory.nebius.com/v1"
+fi
 ```
 
 **Step 4. Generate a gateway password:**
@@ -303,7 +310,7 @@ nebius ai endpoint create \
   --container-port 18789 \
   --disk-size 250Gi \
   --env "TOKEN_FACTORY_API_KEY={user's key}" \
-  --env "TOKEN_FACTORY_URL=https://api.tokenfactory.nebius.com/v1" \
+  --env "TOKEN_FACTORY_URL=${TOKEN_FACTORY_URL}" \
   --env "INFERENCE_MODEL=$MODEL" \
   --env "OPENCLAW_WEB_PASSWORD=$PASSWORD" \
   --public \
@@ -339,6 +346,47 @@ ghcr.io/colygon/openclaw-serverless:latest
 ghcr.io/colygon/nemoclaw-serverless:latest
 ```
 
+### OpenClaw Nebius Provider Plugin
+
+After deploying OpenClaw, you can install the **Nebius provider plugin** to give your agent access to 44+ open-source models (Qwen, DeepSeek, Llama, GLM, FLUX, and more) via Nebius Token Factory.
+
+**Install the plugin:**
+```bash
+openclaw plugins install clawhub:@colygon/openclaw-nebius
+```
+
+**Configure the API key** (both locations needed):
+
+```bash
+# 1. Auth profile (for the agent) — edit ~/.openclaw/agents/main/agent/auth-profiles.json:
+#    Add "nebius:default": { "type": "api_key", "provider": "nebius", "key": "v1.YOUR_KEY" }
+#    Add "nebius": "nebius:default" under "lastGood"
+
+# 2. Environment variable (for the gateway LaunchAgent):
+launchctl setenv NEBIUS_API_KEY "v1.YOUR_KEY_HERE"
+```
+
+**Enable and restart:**
+```bash
+openclaw config set plugins.allow '["nebius"]'
+openclaw gateway restart
+```
+
+**Verify:**
+```bash
+openclaw plugins inspect nebius
+openclaw models list --provider nebius
+```
+
+**Set default model (optional):**
+```bash
+openclaw config set agents.defaults.model.primary "nebius/deepseek-ai/DeepSeek-V3.2"
+```
+
+**Model naming:** Always use the `nebius/` prefix — `nebius/zai-org/GLM-5` (correct), not `zai-org/GLM-5` (will fail with "Unknown model").
+
+Popular models: `nebius/Qwen/Qwen3.5-397B-A17B`, `nebius/deepseek-ai/DeepSeek-V3.2`, `nebius/zai-org/GLM-5`, `nebius/openai/gpt-oss-120b`. See the [plugin repo](https://github.com/colygon/openclaw-nebius-plugin) for the full catalog and pricing.
+
 ### Gateway Configuration (openclaw.json)
 
 The entrypoint script generates `~/.openclaw/openclaw.json` at container startup. Critical rules:
@@ -360,7 +408,7 @@ The entrypoint script generates `~/.openclaw/openclaw.json` at container startup
     "controlUi": { "allowedOrigins": ["*"] }
   }
   ```
-- **Model IDs must use Token Factory format**: Use `zai-org/GLM-5`, NOT `THUDM/GLM-4-9B-0414`. Check available models: `curl -s https://api.tokenfactory.nebius.com/v1/models -H "Authorization: Bearer $KEY" | jq '.data[].id'`
+- **Model IDs must use Token Factory format**: Use `zai-org/GLM-5`, NOT `THUDM/GLM-4-9B-0414`. Check available models: `curl -s $TOKEN_FACTORY_URL/models -H "Authorization: Bearer $KEY" | jq '.data[].id'`
 
 ### Dashboard Access
 
@@ -411,9 +459,13 @@ Token Factory is the default, but OpenRouter and HuggingFace also work (routed t
 
 | Provider | Env Vars | Notes |
 |---|---|---|
-| Token Factory | `TOKEN_FACTORY_API_KEY`, `TOKEN_FACTORY_URL=https://api.tokenfactory.nebius.com/v1` | Nebius native API |
+| Token Factory | `TOKEN_FACTORY_API_KEY`, `TOKEN_FACTORY_URL` (see below) | Nebius native API |
 | OpenRouter | `OPENROUTER_API_KEY`, `INFERENCE_URL=https://openrouter.ai/api/v1`, `OPENROUTER_PROVIDER_ONLY=nebius` | Restricted to Nebius provider |
 | HuggingFace | `HUGGINGFACE_API_KEY`, `HF_TOKEN=<key>`, `HUGGINGFACE_PROVIDER=nebius` | Provider set to Nebius |
+
+**Token Factory URLs by region:**
+- EU (`eu-north1`, `eu-west1`): `https://api.tokenfactory.nebius.com/v1`
+- US (`us-central1`): `https://api.tokenfactory.us-central1.nebius.com/v1`
 
 ## Common Gotchas
 
@@ -438,7 +490,8 @@ Token Factory is the default, but OpenRouter and HuggingFace also work (routed t
 | Public IP quota | Default limit is 3 public IPs per tenant. Delete unused endpoints to free IPs. |
 | SSH keys at creation only | `--ssh-key` must be passed during `nebius ai endpoint create`. Cannot add SSH keys after creation. Generate `.pub` from private key: `ssh-keygen -y -f key > key.pub` |
 | Registry image list | `nebius registry image list --parent-id <registry-id>` lists images. Use `nebius registry list` to find registry IDs. |
-| Token Factory model IDs | Use `zai-org/GLM-5`, NOT `THUDM/GLM-4-9B-0414`. List models: `curl -s https://api.tokenfactory.nebius.com/v1/models -H "Authorization: Bearer $KEY"` |
+| Token Factory model IDs | Use `zai-org/GLM-5`, NOT `THUDM/GLM-4-9B-0414`. List models: `curl -s $TOKEN_FACTORY_URL/models -H "Authorization: Bearer $KEY"` |
+| Token Factory URL wrong for region | EU uses `https://api.tokenfactory.nebius.com/v1`. US (`us-central1`) uses `https://api.tokenfactory.us-central1.nebius.com/v1`. Wrong URL → silent 401 or model not found. |
 | `plugins` key in openclaw.json | Invalid and crashes gateway. NemoClaw is auto-loaded via npm global install. |
 
 ## Troubleshooting
@@ -461,7 +514,7 @@ Token Factory is the default, but OpenRouter and HuggingFace also work (routed t
 | OpenClaw gateway token mismatch | Token must be in config file (`gateway.auth.token`), not just env var. After manual restart, env may be lost. |
 | OpenClaw "Config invalid" | Remove `plugins` key from `openclaw.json`. Only recognized top-level keys: `agents`, `models`, `gateway`, `channels`. |
 | OpenClaw "pairing required" | Run `openclaw devices approve --latest` inside the container. Each new client needs approval. |
-| OpenClaw 404 on inference | Wrong model ID format. Token Factory uses `zai-org/GLM-5`, not HuggingFace format `THUDM/GLM-4-9B-0414`. |
+| OpenClaw 404 on inference | Wrong model ID format. Token Factory uses `zai-org/GLM-5`, not HuggingFace format `THUDM/GLM-4-9B-0414`. Also check TOKEN_FACTORY_URL matches the region (US needs `api.tokenfactory.us-central1.nebius.com`). |
 
 For full authentication options, see [Nebius CLI docs](https://docs.nebius.com/cli/configure) and [references/iam-reference.md](references/iam-reference.md).
 
