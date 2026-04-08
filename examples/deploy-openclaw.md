@@ -67,24 +67,30 @@ curl http://$IP:8080
 
 ## Connect to Your Agent
 
-### Via TUI (recommended)
+### Step 1: SSH tunnel (required — browsers block device identity without HTTPS or localhost)
 ```bash
-# SSH tunnel (avoids plaintext WebSocket warning)
-ssh -f -N -L 28789:$IP:18789 nebius@$IP
+ssh -f -N -o StrictHostKeyChecking=no -L 28789:$IP:18789 nebius@$IP
+```
 
-# Connect
+### Step 2: Approve device pairing (first time only)
+The gateway token **must** be passed as an env var or this fails with "unauthorized":
+```bash
+ssh -o StrictHostKeyChecking=no nebius@$IP \
+  "sudo docker exec \$(sudo docker ps -q | head -1) \
+   env OPENCLAW_GATEWAY_TOKEN=$PASSWORD openclaw devices approve --latest"
+```
+
+### Step 3: Open dashboard or TUI
+
+**Via Browser** (always use localhost, never direct IP):
+```
+http://localhost:28789/#token=<PASSWORD>&gatewayUrl=ws://localhost:28789
+```
+
+**Via TUI:**
+```bash
 openclaw tui --url ws://localhost:28789 --token $PASSWORD
-
-# First time: approve device pairing
-ssh nebius@$IP "sudo docker exec \$(sudo docker ps -q | head -1) openclaw devices approve --latest"
 ```
-
-### Via Browser Dashboard
-```
-http://<IP>:18789/#token=<PASSWORD>&gatewayUrl=ws://<IP>:18789
-```
-
-Note: Browser requires HTTPS for device identity. Use SSH tunnel (`http://localhost:28789`) or set up a reverse proxy with a self-signed cert.
 
 ## Configure Nebius Provider Plugin
 
@@ -186,7 +192,8 @@ nebius ai endpoint logs <ID> --follow --since 5m
 | Issue | Fix |
 |-------|-----|
 | Health check works but gateway unreachable | Add `--container-port 18789` (both ports needed) |
-| "pairing required" | `ssh nebius@<IP> "sudo docker exec $(docker ps -q) openclaw devices approve --latest"` |
+| "device identity" / secure context error | Browser requires HTTPS or localhost. Set up SSH tunnel: `ssh -f -N -L 28789:<IP>:18789 nebius@<IP>` then use `http://localhost:28789/...` |
+| "pairing required" | Must pass gateway token: `ssh nebius@<IP> "sudo docker exec $(docker ps -q) env OPENCLAW_GATEWAY_TOKEN=<password> openclaw devices approve --latest"` |
 | "gateway token mismatch" | Token lost after restart. SSH in and set in config: `openclaw config set gateway.auth.token <password>` |
 | 404 on inference | Wrong model ID format. Use `zai-org/GLM-5` not `THUDM/...` |
 | "Config invalid - plugins" | Remove `plugins` key from `openclaw.json`. NemoClaw auto-loads via npm. |

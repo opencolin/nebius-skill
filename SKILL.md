@@ -330,10 +330,22 @@ curl http://<PUBLIC_IP>:8080
 # Expected: {"status":"healthy","service":"openclaw-serverless","model":"zai-org/GLM-5",...}
 ```
 
-**Step 8. Tell the user how to connect:**
-- Dashboard: `http://<IP>:18789/#token=<PASSWORD>&gatewayUrl=ws://<IP>:18789`
-- TUI: `ssh -f -N -L 28789:<IP>:18789 nebius@<IP> && openclaw tui --url ws://localhost:28789 --token <PASSWORD>`
-- Device pairing: `ssh nebius@<IP> "sudo docker exec $(sudo docker ps -q | head -1) openclaw devices approve --latest"`
+**Step 8. Set up SSH tunnel** (required — browsers block device identity without HTTPS or localhost):
+```bash
+ssh -f -N -o StrictHostKeyChecking=no -L 28789:<PUBLIC_IP>:18789 nebius@<PUBLIC_IP>
+```
+
+**Step 9. Auto-approve device pairing** (the gateway token must be passed or the approve command fails with "unauthorized"):
+```bash
+ssh -o StrictHostKeyChecking=no nebius@<PUBLIC_IP> \
+  "sudo docker exec \$(sudo docker ps -q | head -1) \
+   env OPENCLAW_GATEWAY_TOKEN=$PASSWORD openclaw devices approve --latest"
+```
+
+**Step 10. Tell the user how to connect** (always use localhost URLs, never direct IP):
+- Dashboard: `http://localhost:28789/#token=<PASSWORD>&gatewayUrl=ws://localhost:28789`
+- TUI: `openclaw tui --url ws://localhost:28789 --token <PASSWORD>`
+- If the SSH tunnel dies: `ssh -f -N -L 28789:<IP>:18789 nebius@<IP>`
 
 ### Pre-built Public Images
 
@@ -414,28 +426,32 @@ The entrypoint script generates `~/.openclaw/openclaw.json` at container startup
 
 - **Expose the port**: Use `--container-port 18789` alongside `--container-port 8080`
 - **Set dashboard password**: `--env "OPENCLAW_WEB_PASSWORD=<random-token>"`
-- **Dashboard URL format**: `http://<IP>:18789/#token=<password>&gatewayUrl=ws://<IP>:18789`
+- **SSH tunnel required**: Browsers block device identity without HTTPS or localhost. Always set up a tunnel first:
+  ```bash
+  ssh -f -N -o StrictHostKeyChecking=no -L 28789:<IP>:18789 nebius@<IP>
+  ```
+- **Dashboard URL format** (always use localhost, never direct IP):
+  `http://localhost:28789/#token=<password>&gatewayUrl=ws://localhost:28789`
   - Token MUST be in the URL **hash** (`#token=`), NOT query string (`?token=`)
   - `gatewayUrl` MUST accompany `token` or it becomes "pending" and is ignored
-- **Device pairing**: Each new browser/TUI requires pairing approval from the gateway host:
+- **Device pairing**: Each new browser/TUI requires pairing approval. The gateway token **must** be passed as an env var or the command fails with "unauthorized":
   ```bash
-  # SSH into the endpoint and approve inside the container:
-  ssh nebius@<IP> "sudo docker exec \$(sudo docker ps -q | head -1) openclaw devices approve --latest"
+  ssh nebius@<IP> "sudo docker exec \$(sudo docker ps -q | head -1) \
+    env OPENCLAW_GATEWAY_TOKEN=<password> openclaw devices approve --latest"
   ```
-- **HTTPS required for browser**: Dashboard needs secure context for device identity. Options:
-  - Self-signed cert via nginx reverse proxy
-  - SSH tunnel: `ssh -f -N -L 28789:<endpoint-ip>:18789 nebius@<vm-ip>` then access `http://localhost:28789`
-  - Tailscale Serve/Funnel
 
 ### TUI Connection
 
 ```bash
-# Via SSH tunnel (recommended — avoids insecure WebSocket warning):
-ssh -f -N -L 28789:<endpoint-ip>:18789 nebius@<vm-ip>
-openclaw tui --url ws://localhost:28789 --token <gateway-token>
+# 1. SSH tunnel (if not already set up for dashboard):
+ssh -f -N -o StrictHostKeyChecking=no -L 28789:<IP>:18789 nebius@<IP>
 
-# Direct (requires env var to bypass security check):
-OPENCLAW_ALLOW_INSECURE_PRIVATE_WS=1 openclaw tui --url ws://<IP>:18789 --token <token>
+# 2. Approve device pairing (first time only — must include gateway token):
+ssh nebius@<IP> "sudo docker exec \$(sudo docker ps -q | head -1) \
+  env OPENCLAW_GATEWAY_TOKEN=<password> openclaw devices approve --latest"
+
+# 3. Connect:
+openclaw tui --url ws://localhost:28789 --token <password>
 ```
 
 Note: Port 18789 on localhost may conflict with a local OpenClaw gateway. Use a different port (e.g., 28789).
@@ -513,7 +529,8 @@ Token Factory is the default, but OpenRouter and HuggingFace also work (routed t
 | Public IP quota exceeded | Default is 3 IPs per tenant. Delete unused endpoints: `nebius ai endpoint delete <id>`. |
 | OpenClaw gateway token mismatch | Token must be in config file (`gateway.auth.token`), not just env var. After manual restart, env may be lost. |
 | OpenClaw "Config invalid" | Remove `plugins` key from `openclaw.json`. Only recognized top-level keys: `agents`, `models`, `gateway`, `channels`. |
-| OpenClaw "pairing required" | Run `openclaw devices approve --latest` inside the container. Each new client needs approval. |
+| OpenClaw "device identity" error | Browser requires HTTPS or localhost. Set up SSH tunnel: `ssh -f -N -L 28789:<IP>:18789 nebius@<IP>`, then use `http://localhost:28789/...` |
+| OpenClaw "pairing required" | Must pass gateway token: `ssh nebius@<IP> "sudo docker exec $(docker ps -q) env OPENCLAW_GATEWAY_TOKEN=<password> openclaw devices approve --latest"`. Each new client needs approval. |
 | OpenClaw 404 on inference | Wrong model ID format. Token Factory uses `zai-org/GLM-5`, not HuggingFace format `THUDM/GLM-4-9B-0414`. Also check TOKEN_FACTORY_URL matches the region (US needs `api.tokenfactory.us-central1.nebius.com`). |
 
 For full authentication options, see [Nebius CLI docs](https://docs.nebius.com/cli/configure) and [references/iam-reference.md](references/iam-reference.md).
