@@ -1,0 +1,244 @@
+# Authentication
+
+Setup credentials for Nebius Skill.
+
+## Overview
+
+There are three ways to authenticate with Nebius:
+
+1. **Federation** (interactive) - Browser login, good for development
+2. **Service Accounts** (automated) - For CI/CD and automation
+3. **API Keys** (tokens) - Direct API access
+
+## Federation (Interactive)
+
+**Best for:** Local development with browser access
+
+### Setup
+
+```bash
+nebius profile create
+# Follows prompts:
+# 1. Enter profile name (e.g., "default")
+# 2. Accept defaults for endpoint
+# 3. Login via browser
+```
+
+### Verify
+
+```bash
+nebius iam whoami
+# Returns your user info if authenticated
+```
+
+### Re-authenticate
+
+If your token expires:
+
+```bash
+nebius iam login
+```
+
+## Service Accounts (Automated)
+
+**Best for:** CI/CD pipelines, automation, headless systems
+
+### Create Service Account
+
+```bash
+# Create service account
+nebius iam service-account create \
+  --display-name "ci-automation" \
+  --format json > sa.json
+
+SA_ID=$(jq -r '.metadata.id' sa.json)
+echo "Service Account ID: $SA_ID"
+
+# Generate 4096-bit RSA key (required)
+openssl genrsa 4096 > sa-key.pem
+
+# Get public key
+openssl rsa -in sa-key.pem -pubout > sa-key.pub
+
+# Create key in Nebius
+nebius iam service-account-key create \
+  --service-account-id $SA_ID \
+  --public-key "$(cat sa-key.pub)" \
+  --format json > sa-key-info.json
+```
+
+### Configure Profile
+
+```bash
+# Create config file
+mkdir -p ~/.nebius
+cat > ~/.nebius/config.yaml << 'EOF'
+current-profile: ci
+profiles:
+  ci:
+    endpoint: api.nebius.cloud
+    auth-type: service-account
+    service-account-id: <SA_ID>
+    public-key-id: <KEY_ID>
+    private-key-file-path: /path/to/sa-key.pem
+    parent-id: <PROJECT_ID>
+EOF
+```
+
+### Use in CI/CD
+
+```bash
+# Set environment variables
+export NEBIUS_PROFILE=ci
+
+# Now all nebius commands use service account
+nebius iam whoami
+```
+
+## API Keys (Token-Based)
+
+**Best for:** Scripts, applications, API access
+
+### Generate Token
+
+```bash
+# Generate access token (valid for 1 hour)
+nebius iam get-access-token --format json > token.json
+
+TOKEN=$(jq -r '.access_token' token.json)
+echo "Token: $TOKEN"
+```
+
+### Use in Applications
+
+```bash
+# Python SDK
+from nebius.client import Client
+
+client = Client(
+    api_token=TOKEN,
+    endpoint="api.nebius.cloud"
+)
+```
+
+```bash
+# Shell commands
+nebius ai endpoint list \
+  --oauth-token $TOKEN \
+  --format json
+```
+
+## Token Factory Keys
+
+For **model inference** (separate from authentication):
+
+```bash
+# Get Token Factory key
+nebius mysterybox secret get <SECRET_ID> \
+  --format json | jq -r '.value'
+
+# Store securely
+export TOKEN_FACTORY_API_KEY="<key>"
+```
+
+### Configure in Endpoint
+
+```bash
+nebius ai endpoint create \
+  --name my-endpoint \
+  --image openai/endpoint \
+  --env "TOKEN_FACTORY_API_KEY=$TOKEN_FACTORY_API_KEY" \
+  --env "TOKEN_FACTORY_URL=https://api.tokenfactory.nebius.com/v1"
+```
+
+## Multi-Region Authentication
+
+To access resources in different regions:
+
+```bash
+# Create profile for EU West
+cat >> ~/.nebius/config.yaml << 'EOF'
+  eu-west:
+    endpoint: api.nebius.cloud
+    parent-id: <EU_PROJECT_ID>
+    auth-type: federation
+EOF
+
+# Use specific profile
+nebius mk8s cluster list \
+  --nebius-profile eu-west
+```
+
+## Troubleshooting
+
+### "UNAUTHENTICATED" Error (Exit Code 7)
+
+```bash
+# Check if logged in
+nebius iam whoami
+
+# If fails, re-authenticate
+nebius iam login
+
+# Check token expiry
+nebius iam get-access-token
+```
+
+### "PERMISSION_DENIED" Error (Exit Code 15)
+
+Service account needs proper group membership:
+
+```bash
+# Find editors group
+nebius iam group list --parent-id <TENANT_ID> | grep editors
+
+# Add service account to editors
+nebius iam group-membership create \
+  --parent-id <EDITORS_GROUP_ID> \
+  --member-id $SA_ID
+```
+
+### Service Account Key Issues
+
+```bash
+# Generate correct key size (4096-bit)
+openssl genrsa 4096 > correct-key.pem
+
+# Verify key
+openssl rsa -in correct-key.pem -check
+
+# Update profile with new key path
+```
+
+## Security Best Practices
+
+✅ **Do:**
+- Use service accounts for CI/CD
+- Rotate keys regularly
+- Store keys in secure vaults (Vault, Sealed Secrets)
+- Use scoped API tokens
+- Enable audit logging
+
+❌ **Don't:**
+- Hardcode tokens in code
+- Share API keys
+- Use weak (2048-bit) RSA keys
+- Commit credentials to git
+- Reuse tokens across environments
+
+## References
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/docs/quickstart">
+    Get started in 5 minutes
+  </Card>
+  <Card title="Installation" icon="download" href="/docs/installation">
+    Setup Nebius CLI
+  </Card>
+  <Card title="IAM Reference" icon="lock" href="/api/iam">
+    Full IAM API docs
+  </Card>
+  <Card title="Troubleshooting" icon="wrench" href="/docs/troubleshooting">
+    Fix auth issues
+  </Card>
+</CardGroup>

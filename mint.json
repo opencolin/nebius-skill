@@ -1,0 +1,100 @@
+{
+  "name": "Nebius Skill",
+  "logo": {
+    "dark": "/logo/dark.svg",
+    "light": "/logo/light.svg"
+  },
+  "favicon": "/favicon.svg",
+  "colors": {
+    "primary": "#0D9488",
+    "light": "#67E8F9",
+    "dark": "#06B6D4",
+    "ultraLight": "#ECFDFD",
+    "ultraDark": "#0F172A"
+  },
+  "modeToggle": {
+    "default": "light",
+    "isHidden": false
+  },
+  "topbarCtaButton": {
+    "name": "Get Started",
+    "url": "https://github.com/opencolin/nebius-skill"
+  },
+  "tabs": [
+    {
+      "name": "Documentation",
+      "url": "docs"
+    },
+    {
+      "name": "Examples",
+      "url": "examples"
+    },
+    {
+      "name": "API Reference",
+      "url": "api"
+    }
+  ],
+  "navigation": [
+    {
+      "group": "Getting Started",
+      "pages": [
+        "docs/introduction",
+        "docs/quickstart",
+        "docs/installation",
+        "docs/authentication"
+      ]
+    },
+    {
+      "group": "Core Concepts",
+      "pages": [
+        "docs/services",
+        "docs/regions-platforms",
+        "docs/conventions",
+        "docs/security"
+      ]
+    },
+    {
+      "group": "Services",
+      "pages": [
+        "docs/services/endpoints",
+        "docs/services/compute",
+        "docs/services/kubernetes",
+        "docs/services/networking",
+        "docs/services/registry",
+        "docs/services/iam"
+      ]
+    },
+    {
+      "group": "Examples",
+      "pages": [
+        "examples/deploy-openclaw",
+        "examples/deploy-gpu-vm",
+        "examples/deploy-serverless-endpoint"
+      ]
+    },
+    {
+      "group": "Advanced",
+      "pages": [
+        "docs/api-sdks",
+        "docs/troubleshooting",
+        "docs/gotchas",
+        "docs/safety-rules"
+      ]
+    },
+    {
+      "group": "API Reference",
+      "pages": [
+        "api/endpoints",
+        "api/compute",
+        "api/kubernetes",
+        "api/networking"
+      ]
+    }
+  ],
+  "footerSocials": {
+    "github": "https://github.com/opencolin/nebius-skill",
+    "slack": "#ai-experiments"
+  },
+  "backgroundImage": "/background.png",
+  "openapi": "openapi.json"
+}
