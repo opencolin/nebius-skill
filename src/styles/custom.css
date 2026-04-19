@@ -1,0 +1,220 @@
+/* Nebius Skill Custom Starlight Theme */
+
+:root {
+  /* Teal color scheme for Nebius */
+  --accent: #0D9488;
+  --accent-dark: #0F766E;
+  --accent-light: #14B8A6;
+  --accent-lighter: #2DD4BF;
+
+  /* Backgrounds */
+  --bg-accent-light: #F0FDFA;
+
+  /* Text */
+  --text-accent: #0D9488;
+}
+
+/* Override Starlight accent colors */
+:root {
+  --sl-color-accent-low: #F0FDFA;
+  --sl-color-accent: #0D9488;
+  --sl-color-accent-high: #0F766E;
+}
+
+/* Navigation and header styling */
+nav a:hover,
+nav a.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+/* Links */
+a {
+  color: var(--accent);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition: border-color 0.2s ease;
+}
+
+a:hover {
+  border-bottom-color: var(--accent);
+}
+
+/* Code blocks */
+pre {
+  border: 1px solid #E5E7EB;
+  border-radius: 6px;
+}
+
+/* Callouts/admonitions */
+.sl-callout {
+  border-left: 4px solid var(--accent);
+}
+
+.sl-callout.info {
+  --sl-callout-color: var(--accent);
+}
+
+/* Buttons */
+button,
+[role="button"] {
+  background-color: var(--accent);
+  border: none;
+  border-radius: 4px;
+}
+
+button:hover,
+[role="button"]:hover {
+  background-color: var(--accent-dark);
+}
+
+/* Sidebar */
+.sl-sidebar {
+  border-right: 1px solid #E5E7EB;
+}
+
+.sl-sidebar-item[aria-current="page"] {
+  background-color: var(--bg-accent-light);
+  color: var(--accent-dark);
+}
+
+.sl-sidebar-item[aria-current="page"] a {
+  color: var(--accent-dark);
+  font-weight: 600;
+}
+
+/* Tables */
+table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 1.5rem 0;
+}
+
+table th {
+  background-color: var(--bg-accent-light);
+  color: var(--accent-dark);
+  padding: 0.75rem;
+  text-align: left;
+  font-weight: 600;
+  border: 1px solid #E5E7EB;
+}
+
+table td {
+  padding: 0.75rem;
+  border: 1px solid #E5E7EB;
+}
+
+table tr:hover {
+  background-color: #FAFAFA;
+}
+
+/* Badges and tags */
+.badge {
+  background-color: var(--bg-accent-light);
+  color: var(--accent-dark);
+  padding: 0.25rem 0.5rem;
+  border-radius: 3px;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+/* Code inline */
+code {
+  background-color: #F3F4F6;
+  color: var(--accent-dark);
+  padding: 0.2rem 0.4rem;
+  border-radius: 3px;
+  font-size: 0.9em;
+}
+
+/* Search highlights */
+mark {
+  background-color: #FEF3C7;
+  color: inherit;
+}
+
+/* Focus states */
+*:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Headings */
+h1, h2, h3, h4, h5, h6 {
+  color: #1F2937;
+}
+
+h1 {
+  border-bottom: 2px solid var(--bg-accent-light);
+  padding-bottom: 0.5rem;
+}
+
+/* Blockquotes */
+blockquote {
+  border-left: 4px solid var(--accent-light);
+  color: #6B7280;
+  padding-left: 1rem;
+  margin: 1.5rem 0;
+}
+
+/* Breadcrumbs */
+.sl-breadcrumb {
+  color: #6B7280;
+}
+
+.sl-breadcrumb a {
+  color: var(--accent);
+}
+
+/* Back to top button */
+.back-to-top {
+  color: var(--accent);
+}
+
+.back-to-top:hover {
+  color: var(--accent-dark);
+}
+
+/* Mobile menu */
+@media (max-width: 768px) {
+  nav {
+    border-top: 3px solid var(--accent);
+  }
+}
+
+/* Dark mode support (optional) */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --sl-color-accent-low: rgba(13, 148, 136, 0.1);
+    --sl-color-accent: #14B8A6;
+    --sl-color-accent-high: #2DD4BF;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    color: #F3F4F6;
+  }
+
+  code {
+    background-color: rgba(31, 41, 55, 0.5);
+    color: #86EFAC;
+  }
+
+  table th {
+    background-color: rgba(13, 148, 136, 0.2);
+  }
+
+  blockquote {
+    color: #9CA3AF;
+  }
+}
+
+/* Print styles */
+@media print {
+  nav, .sl-sidebar {
+    display: none;
+  }
+
+  a {
+    text-decoration: underline;
+  }
+}
