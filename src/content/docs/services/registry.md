@@ -1,3 +1,8 @@
+---
+title: Container Registry Reference
+description: Documentation page
+---
+
 # Container Registry Reference
 
 ## Create Registry

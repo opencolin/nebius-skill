@@ -1,3 +1,8 @@
+---
+title: Nebius gRPC API & SDK Reference
+description: Documentation page
+---
+
 # Nebius gRPC API & SDK Reference
 
 The `nebius` CLI wraps the gRPC API. For programmatic access — scripts, applications, CI/CD pipelines — use the Go SDK, Python SDK, Terraform provider, or raw gRPC.

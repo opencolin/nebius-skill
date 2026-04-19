@@ -1,3 +1,8 @@
+---
+title: Compute VM Reference
+description: Documentation page
+---
+
 # Compute VM Reference
 
 ## Create Boot Disk

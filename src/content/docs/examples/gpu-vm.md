@@ -1,3 +1,8 @@
+---
+title: Deploy a GPU VM on Nebius AI Cloud
+description: Documentation page
+---
+
 # Deploy a GPU VM on Nebius AI Cloud
 
 This example creates a GPU virtual machine with CUDA and Docker pre-installed, suitable for running vLLM or other GPU workloads.

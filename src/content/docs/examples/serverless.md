@@ -1,3 +1,8 @@
+---
+title: Deploy a Serverless AI Endpoint on Nebius
+description: Documentation page
+---
+
 # Deploy a Serverless AI Endpoint on Nebius
 
 This example deploys an AI agent container as a serverless endpoint on Nebius AI Cloud.

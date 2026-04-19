@@ -1,3 +1,8 @@
+---
+title: IAM & Authentication Reference
+description: Documentation page
+---
+
 # IAM & Authentication Reference
 
 ## Initial Setup (Interactive)

@@ -1,3 +1,8 @@
+---
+title: Networking (VPC) Reference
+description: Documentation page
+---
+
 # Networking (VPC) Reference
 
 ## Create Network

@@ -7,73 +7,58 @@ export default defineConfig({
 		starlight({
 			title: 'Nebius Skill',
 			description: 'Deploy and manage infrastructure on Nebius AI Cloud using Claude Code',
-			logo: {
-				src: './src/assets/logo.svg',
-				alt: 'Nebius Skill Logo',
-			},
-			social: {
-				github: 'https://github.com/opencolin/nebius-skill',
-				slack: 'https://slack.com',
-			},
+			social: [
+				{ label: 'GitHub', href: 'https://github.com/opencolin/nebius-skill', icon: 'github' },
+			],
 			sidebar: [
 				{
 					label: 'Getting Started',
 					items: [
-						{ label: 'Introduction', slug: 'intro' },
-						{ label: 'Quickstart', slug: 'quickstart' },
-						{ label: 'Installation', slug: 'installation' },
-						{ label: 'Authentication', slug: 'authentication' },
+						{ label: 'Introduction', link: '/intro' },
+						{ label: 'Quickstart', link: '/intro/quickstart' },
+						{ label: 'Installation', link: '/intro/installation' },
+						{ label: 'Authentication', link: '/intro/authentication' },
 					],
 				},
 				{
 					label: 'Core Concepts',
 					items: [
-						{ label: 'Services', slug: 'services' },
-						{ label: 'Regions & Platforms', slug: 'regions' },
-						{ label: 'Conventions', slug: 'conventions' },
-						{ label: 'Safety Rules', slug: 'safety' },
+						{ label: 'Services', link: '/core-concepts/services' },
+						{ label: 'Regions & Platforms', link: '/core-concepts/regions' },
+						{ label: 'Conventions', link: '/core-concepts/conventions' },
+						{ label: 'Safety & Best Practices', link: '/core-concepts/safety' },
 					],
 				},
 				{
 					label: 'Services',
-					collapsed: false,
 					items: [
-						{ label: 'AI Endpoints', slug: 'services/endpoints' },
-						{ label: 'Compute VMs', slug: 'services/compute' },
-						{ label: 'Kubernetes', slug: 'services/kubernetes' },
-						{ label: 'Container Registry', slug: 'services/registry' },
-						{ label: 'Networking', slug: 'services/networking' },
-						{ label: 'IAM', slug: 'services/iam' },
+						{ label: 'AI Endpoints', link: '/services/endpoints' },
+						{ label: 'Compute VMs', link: '/services/compute' },
+						{ label: 'Kubernetes', link: '/services/kubernetes' },
+						{ label: 'Container Registry', link: '/services/registry' },
+						{ label: 'Networking', link: '/services/networking' },
+						{ label: 'IAM', link: '/services/iam' },
 					],
 				},
 				{
 					label: 'Examples',
 					items: [
-						{ label: 'Deploy OpenClaw', slug: 'examples/openclaw' },
-						{ label: 'Deploy GPU VM', slug: 'examples/gpu-vm' },
-						{ label: 'Deploy Serverless', slug: 'examples/serverless' },
+						{ label: 'Deploy OpenClaw', link: '/examples/openclaw' },
+						{ label: 'Deploy GPU VM', link: '/examples/gpu-vm' },
+						{ label: 'Deploy Serverless', link: '/examples/serverless' },
 					],
 				},
 				{
 					label: 'Advanced',
 					items: [
-						{ label: 'API & SDKs', slug: 'advanced/api-sdks' },
-						{ label: 'Troubleshooting', slug: 'advanced/troubleshooting' },
-						{ label: 'Common Gotchas', slug: 'advanced/gotchas' },
+						{ label: 'API & SDKs', link: '/advanced/api-sdks' },
+						{ label: 'Troubleshooting', link: '/advanced/troubleshooting' },
+						{ label: 'Common Gotchas', link: '/advanced/gotchas' },
 					],
 				},
 			],
 			customCss: [
 				'./src/styles/custom.css',
-			],
-			head: [
-				{
-					tag: 'meta',
-					attrs: {
-						name: 'theme-color',
-						content: '#0D9488',
-					},
-				},
 			],
 		}),
 	],

@@ -1,3 +1,8 @@
+---
+title: Serverless AI Endpoints Reference
+description: Documentation page
+---
+
 # Serverless AI Endpoints Reference
 
 ## Create Endpoint

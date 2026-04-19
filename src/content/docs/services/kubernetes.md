@@ -1,3 +1,8 @@
+---
+title: Managed Kubernetes (mk8s) Reference
+description: Documentation page
+---
+
 # Managed Kubernetes (mk8s) Reference
 
 ## Create Cluster
