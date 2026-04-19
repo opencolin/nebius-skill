@@ -1,166 +1,169 @@
----
-title: Managed Kubernetes
-description: Enterprise Kubernetes clusters with GPU support
----
-
-Deploy production-grade Kubernetes clusters with automatic scaling and GPU support.
+# Managed Kubernetes (mk8s) Reference
 
 ## Create Cluster
 
 ```bash
 nebius mk8s cluster create \
-  --name my-cluster \
-  --region eu-north1 \
-  --network my-vpc
+  --name <cluster-name> \
+  --parent-id <PROJECT_ID> \
+  --control-plane-subnet-id <SUBNET_ID> \
+  --control-plane-version "1.31" \
+  --control-plane-endpoints-public-endpoint \
+  --format json
 ```
 
-Get kubeconfig:
-```bash
-nebius mk8s cluster kubeconfig --name my-cluster > ~/.kube/config
-```
+### Key Parameters
 
-## Node Groups
+| Parameter | Description |
+|---|---|
+| `--name` | Cluster name |
+| `--parent-id` | Project ID (required) |
+| `--control-plane-subnet-id` | Subnet for control plane (required) |
+| `--control-plane-version` | Kubernetes version (e.g., `1.31`) |
+| `--control-plane-endpoints-public-endpoint` | Enable public API endpoint |
+| `--control-plane-etcd-cluster-size` | etcd cluster size (default: 3) |
+| `--control-plane-karpenter` | Install Karpenter for auto-provisioning |
+| `--kube-network-service-cidrs` | Service CIDR (default: `/16`) |
 
-Create a node group with GPUs:
-
-```bash
-nebius mk8s node-group create \
-  --name gpu-nodes \
-  --cluster my-cluster \
-  --machine-type gpu-h100-sxm \
-  --disk-size 100 \
-  --min-nodes 1 \
-  --max-nodes 10 \
-  --node-labels workload=gpu
-```
-
-Create CPU node group for general workloads:
+## Create Node Group
 
 ```bash
 nebius mk8s node-group create \
-  --name cpu-nodes \
-  --cluster my-cluster \
-  --machine-type cpu-e2 \
-  --disk-size 50 \
-  --min-nodes 3 \
-  --max-nodes 20
+  --parent-id <CLUSTER_ID> \
+  --name <node-group-name> \
+  --fixed-node-count 2 \
+  --template-resources-platform gpu-h100-sxm \
+  --template-resources-preset 1gpu-16vcpu-200gb \
+  --format json
 ```
 
-## Deploy Application
+### Node Group Parameters
+
+| Parameter | Description |
+|---|---|
+| `--parent-id` | Cluster ID |
+| `--name` | Node group name |
+| `--fixed-node-count` | Number of nodes |
+| `--template-resources-platform` | GPU/CPU platform |
+| `--template-resources-preset` | Resource preset |
+
+## Get Cluster Credentials (kubectl access)
 
 ```bash
-kubectl apply -f - <<EOF
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: my-app
-spec:
-  replicas: 3
-  selector:
-    matchLabels:
-      app: my-app
-  template:
-    metadata:
-      labels:
-        app: my-app
-    spec:
-      nodeSelector:
-        workload: gpu  # Uses GPU nodes
-      containers:
-      - name: app
-        image: my-registry.nebius.cloud/my-image:latest
-        resources:
-          requests:
-            nvidia.com/gpu: 1
-          limits:
-            nvidia.com/gpu: 1
-EOF
-```
+# Generate kubeconfig for external access
+nebius mk8s cluster get-credentials \
+  --id <CLUSTER_ID> \
+  --external
 
-## Verify Deployment
-
-```bash
+# Verify access
 kubectl get nodes
-kubectl get pods
-kubectl describe node gpu-node-1
 ```
 
-## Scaling
-
-Clusters scale automatically based on demand.
-
-Configure cluster autoscaler:
-```bash
-nebius mk8s cluster update \
-  --name my-cluster \
-  --autoscaling-enabled \
-  --scale-up-delay 1m \
-  --scale-down-delay 10m
-```
-
-## Monitoring
-
-**Install metrics-server** (usually pre-installed):
-```bash
-kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/download/v0.6.1/components.yaml
-```
-
-**View resource usage:**
-```bash
-kubectl top nodes
-kubectl top pods --all-namespaces
-```
-
-## Networking
-
-Clusters include:
-- Private network isolation
-- Built-in DNS
-- Service discovery
-- Load balancer support
+## Manage Clusters
 
 ```bash
-# Expose service
-kubectl expose deployment my-app --type LoadBalancer --port 80
+# List clusters
+nebius mk8s cluster list --format json
+
+# Get cluster details
+nebius mk8s cluster get --id <CLUSTER_ID> --format json
+
+# List available Kubernetes versions
+nebius mk8s cluster list-control-plane-versions --format json
+
+# Delete cluster
+nebius mk8s cluster delete --id <CLUSTER_ID>
 ```
 
-## Cost Breakdown
+## Manage Node Groups
 
-| Component | Cost |
-|-----------|------|
-| Control plane | $0.50/hour |
-| CPU node (H100) | $2.50/hour |
-| Network egress | $0.10/GB |
-| Persistent volume | $0.05/GB/month |
-
-**Tip:** Use reserved instances for 30%+ savings on long-running clusters.
-
-## Troubleshooting
-
-**Pods pending**
 ```bash
-kubectl describe pod <pod-name>
-# Check node resources, affinity rules
+# List node groups
+nebius mk8s node-group list --parent-id <CLUSTER_ID> --format json
+
+# Upgrade node group
+nebius mk8s node-group upgrade --id <NODE_GROUP_ID>
+
+# Delete node group
+nebius mk8s node-group delete --id <NODE_GROUP_ID>
 ```
 
-**Node not ready**
+## Soperator (Slurm on Kubernetes)
+
+Soperator runs Slurm clusters on top of Kubernetes for HPC/AI training workloads.
+
+### Prerequisites
+
+- A running mk8s cluster with GPU node groups
+- NVIDIA GPU Operator installed
+- NVIDIA Network Operator (if using InfiniBand)
+- Cilium CNI
+- Shared storage with ReadWriteMany PVC
+
+### Deploy via Helm
+
 ```bash
-kubectl describe node <node-name>
-kubectl logs -n kube-system kubelet
+# Add Nebius Helm repo
+helm repo add nebius https://charts.nebius.com
+helm repo update
+
+# Install Soperator
+helm install soperator nebius/soperator \
+  --namespace soperator-system \
+  --create-namespace
+
+# Deploy a Slurm cluster
+helm install my-slurm nebius/slurm-cluster \
+  --namespace my-slurm \
+  --create-namespace \
+  --values slurm-values.yaml
 ```
 
-**GPU not detected**
+### Managed Soperator
+
+For a fully managed experience, Nebius offers Managed Soperator which pre-packages all components including NVIDIA drivers. Deploy from the web console or use:
+
 ```bash
-kubectl get nodes -o json | jq '.items[].status.capacity'
-# Should show nvidia.com/gpu: 1 for GPU nodes
+nebius applications k8s-release create \
+  --name <release-name> \
+  --format json
 ```
 
-## Best Practices
+## Full Workflow: Cluster + GPU Node Group
 
-- ✅ Use resource requests/limits
-- ✅ Deploy monitoring (Prometheus)
-- ✅ Use multiple node groups for workload isolation
-- ✅ Enable cluster autoscaling
-- ✅ Use pod disruption budgets for reliability
-- ❌ Don't run workloads on control plane
-- ❌ Don't use taint mode without proper toleration understanding
+```bash
+# 1. Create network & subnet (see networking-reference.md)
+
+# 2. Create cluster
+CLUSTER_ID=$(nebius mk8s cluster create \
+  --name my-k8s-cluster \
+  --parent-id $PROJECT_ID \
+  --control-plane-subnet-id $SUBNET_ID \
+  --control-plane-version "1.31" \
+  --control-plane-endpoints-public-endpoint \
+  --format json | jq -r '.metadata.id')
+
+# 3. Wait for cluster to be ready
+echo "Waiting for cluster to be ready..."
+while true; do
+  STATE=$(nebius mk8s cluster get --id $CLUSTER_ID --format json | jq -r '.status.state')
+  echo "State: $STATE"
+  [ "$STATE" = "RUNNING" ] && break
+  sleep 15
+done
+
+# 4. Create GPU node group
+nebius mk8s node-group create \
+  --parent-id $CLUSTER_ID \
+  --name gpu-nodes \
+  --fixed-node-count 1 \
+  --template-resources-platform gpu-h100-sxm \
+  --template-resources-preset 1gpu-16vcpu-200gb \
+  --format json
+
+# 5. Get credentials
+nebius mk8s cluster get-credentials --id $CLUSTER_ID --external
+
+# 6. Verify
+kubectl get nodes
+```

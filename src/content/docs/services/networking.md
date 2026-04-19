@@ -1,179 +1,104 @@
----
-title: VPC Networking
-description: Virtual networks and subnets for infrastructure isolation
----
+# Networking (VPC) Reference
 
-Create isolated networks for your infrastructure with built-in security controls.
-
-## Create VPC
+## Create Network
 
 ```bash
 nebius vpc network create \
-  --name my-network \
-  --description "Production network" \
-  --ipv4-cidr 10.0.0.0/16
+  --name <network-name> \
+  --parent-id <PROJECT_ID> \
+  --format json
 ```
 
-## Create Subnets
+## Create Subnet
 
 ```bash
-# Subnet for compute resources
 nebius vpc subnet create \
-  --name compute-subnet \
-  --network my-network \
-  --ipv4-cidr 10.0.1.0/24 \
-  --region eu-north1
+  --name <subnet-name> \
+  --parent-id <PROJECT_ID> \
+  --network-id <NETWORK_ID> \
+  --ipv4-cidr-blocks '["10.0.0.0/24"]' \
+  --format json
+```
 
-# Subnet for databases
-nebius vpc subnet create \
-  --name db-subnet \
-  --network my-network \
-  --ipv4-cidr 10.0.2.0/24 \
-  --region eu-north1
+## List and Get
+
+```bash
+# List networks
+nebius vpc network list --format json
+
+# List subnets
+nebius vpc subnet list --format json
+
+# Get subnet by name
+nebius vpc subnet get-by-name <subnet-name> --format json
 ```
 
 ## Security Groups
 
-Create firewall rules:
-
 ```bash
-# Allow SSH from office
+# Create security group
 nebius vpc security-group create \
-  --name office-ssh \
-  --network my-network \
-  --description "SSH from office"
+  --name <sg-name> \
+  --parent-id <PROJECT_ID> \
+  --format json
 
-nebius vpc security-group-rule add \
-  --security-group office-ssh \
-  --direction INGRESS \
-  --protocol TCP \
-  --port-min 22 \
-  --port-max 22 \
-  --source-cidr 203.0.113.0/24
+# List security groups
+nebius vpc security-group list --format json
+
+# Create security rule (allow inbound SSH)
+nebius vpc security-rule create \
+  --parent-id <SECURITY_GROUP_ID> \
+  --direction ingress \
+  --protocol tcp \
+  --port 22 \
+  --cidr "0.0.0.0/0" \
+  --format json
 ```
 
-## Attach to VM
+## Public IP Allocations
 
 ```bash
-nebius compute vm create \
-  --name my-vm \
-  --subnet compute-subnet \
-  --security-groups office-ssh,default
+# Allocate public IP
+nebius vpc allocation create \
+  --parent-id <PROJECT_ID> \
+  --format json
+
+# List allocations
+nebius vpc allocation list --format json
 ```
 
-## Common Rules
+## Typical Setup Pattern
 
-**Allow HTTP/HTTPS:**
+Most deployments need a network + subnet before creating VMs or endpoints:
+
 ```bash
-nebius vpc security-group-rule add \
-  --security-group web-server \
-  --direction INGRESS \
-  --protocol TCP \
-  --port-min 80 \
-  --port-max 443 \
-  --source-cidr 0.0.0.0/0
+# 1. Create network
+NETWORK_ID=$(nebius vpc network create \
+  --name my-network \
+  --parent-id $PROJECT_ID \
+  --format json | jq -r '.metadata.id')
+
+# 2. Create subnet
+SUBNET_ID=$(nebius vpc subnet create \
+  --name my-subnet \
+  --parent-id $PROJECT_ID \
+  --network-id $NETWORK_ID \
+  --ipv4-cidr-blocks '["10.0.0.0/24"]' \
+  --format json | jq -r '.metadata.id')
+
+echo "Network: $NETWORK_ID"
+echo "Subnet: $SUBNET_ID"
 ```
 
-**Allow database access from app tier:**
-```bash
-nebius vpc security-group-rule add \
-  --security-group database \
-  --direction INGRESS \
-  --protocol TCP \
-  --port-min 5432 \
-  --port-max 5432 \
-  --source-security-group app-tier
-```
+## Check for Existing Resources
 
-## Private Networks (No Public IP)
-
-VMs can operate entirely within private networks:
+Before creating, check if resources already exist:
 
 ```bash
-nebius compute vm create \
-  --name private-vm \
-  --subnet db-subnet \
-  --no-public-ip
-```
-
-Access via bastion host:
-```bash
-# Bastion VM with public IP
-ssh -i ~/.ssh/nebius nebius@bastion.example.com
-
-# Then SSH to private VM from bastion
-ssh 10.0.2.10
-```
-
-## Route Tables
-
-Customize traffic routing:
-
-```bash
-nebius vpc route-table create \
-  --name custom-routes \
-  --network my-network
-
-nebius vpc route create \
-  --route-table custom-routes \
-  --destination-cidr 10.1.0.0/16 \
-  --next-hop-vpn my-vpn-connection
-```
-
-## Peering
-
-Connect two VPCs:
-
-```bash
-nebius vpc peering create \
-  --name network-peering \
-  --network-a my-network \
-  --network-b partner-network
-```
-
-## VPN Gateway
-
-Connect to on-premises network:
-
-```bash
-nebius vpc vpn-gateway create \
-  --name my-vpn \
-  --network my-network
-
-# Get VPN configuration
-nebius vpc vpn-gateway describe --name my-vpn
-```
-
-## Best Practices
-
-- ✅ Use `/24` or smaller subnets for isolation
-- ✅ Create dedicated security groups per tier
-- ✅ Use private networks for databases
-- ✅ Implement least-privilege firewall rules
-- ✅ Monitor security group changes
-- ❌ Don't use `0.0.0.0/0` for database access
-- ❌ Don't mix dev/prod in same VPC
-- ❌ Don't expose admin ports publicly
-
-## Troubleshooting
-
-**VM can't reach another VM**
-```bash
-# Check security groups
-nebius compute vm describe --name my-vm | grep security-group
-
-# Check if rule exists
-nebius vpc security-group-rule list --security-group target-group
-
-# Check route table
-nebius vpc route list --route-table default
-```
-
-**No internet access from VM**
-```bash
-# Check if public IP assigned
-nebius compute vm describe --name my-vm | grep publicIpAddress
-
-# Check NAT gateway
-nebius vpc nat-gateway describe --name my-nat
+# Check for existing subnets
+EXISTING=$(nebius vpc subnet list --format json | jq -r '.items[] | select(.metadata.name=="my-subnet") | .metadata.id')
+if [ -n "$EXISTING" ]; then
+  echo "Subnet already exists: $EXISTING"
+  SUBNET_ID=$EXISTING
+fi
 ```

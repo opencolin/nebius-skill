@@ -1,215 +1,171 @@
----
-title: IAM & Authentication
-description: User and service account management with role-based access control
----
+# IAM & Authentication Reference
 
-Manage access to Nebius resources using service accounts and role-based access control.
+## Initial Setup (Interactive)
 
-## User Management
+For first-time setup with a browser available:
 
-List users in organization:
 ```bash
-nebius iam user list --organization my-org
+# Create profile (interactive — prompts for name, endpoint, auth)
+nebius profile create
+
+# Browser-based OAuth login (if token expired)
+nebius iam login
+
+# Verify authentication
+nebius iam whoami --format json
+
+# Get user display name (note: deeply nested path)
+nebius iam whoami --format json | jq -r '.user_profile.attributes.name'
+# NOT .identity.display_name — that field doesn't exist
+
+# Get current access token (valid 12 hours)
+nebius iam get-access-token
 ```
 
-Invite user:
+**Important:** `nebius init` does NOT exist. Use `nebius profile create` instead.
+
+## Non-Interactive Setup (CI/CD, Containers, Headless)
+
+`nebius profile create` requires interactive input and cannot be scripted. For automated environments, write the config file directly:
+
 ```bash
-nebius iam user invite \
-  --email user@example.com \
-  --role member
+mkdir -p ~/.nebius
+cat > ~/.nebius/config.yaml << EOF
+current-profile: default
+profiles:
+  default:
+    endpoint: api.nebius.cloud
+    auth-type: federation
+    federation-endpoint: auth.nebius.com
+    parent-id: <PROJECT_ID>
+    tenant-id: <TENANT_ID>
+EOF
+```
+
+Then authenticate once (requires browser the first time):
+
+```bash
+nebius iam login
+```
+
+After the first login, the token is cached in `~/.nebius/` and subsequent CLI calls work non-interactively until the token expires (12 hours).
+
+## Service Account Auth (Fully Automated)
+
+For fully automated environments with no browser access:
+
+```bash
+# 1. Create service account (run this once, interactively)
+SA_ID=$(nebius iam service-account create \
+  --name my-ci-sa \
+  --parent-id <PROJECT_ID> \
+  --format json | jq -r '.metadata.id')
+
+# 2. Add to editors group for permissions
+# (Do this in the Nebius web console)
+
+# 3. Generate auth key pair
+nebius iam auth-public-key generate \
+  --parent-id $SA_ID \
+  --format json > sa-key.json
+
+# The sa-key.json contains the private key and key ID.
+# Store these securely (e.g., as CI secrets).
+
+# 4. Configure CLI profile with service account
+# Write to ~/.nebius/config.yaml with auth-type: service-account
+# and reference the private key file
+```
+
+See [Nebius docs on service account auth](https://docs.nebius.com/cli/configure) for the full configuration format.
+
+## Profiles
+
+```bash
+# Create a profile (interactive — not scriptable)
+nebius profile create --name <profile-name>
+
+# For scripted profile creation, write directly to ~/.nebius/config.yaml
+# See "Non-Interactive Setup" above
+
+# List profiles
+nebius profile list
+
+# Set active profile
+nebius config set profile <profile-name>
+
+# Set project ID for current profile
+nebius config set parent-id <PROJECT_ID>
+```
+
+Create a separate profile for each region/project:
+
+```bash
+nebius profile create --name eu-north1-prod
+nebius config set parent-id <PROJECT_ID>
+```
+
+## Projects
+
+```bash
+# List all projects (scoped to current profile's parent)
+nebius iam project list --format json
+
+# List projects under a specific tenant (cross-region)
+nebius iam project list --parent-id <TENANT_ID> --format json
+
+# Get project IDs
+nebius iam project list --format json | jq -r '.items[].metadata.id'
+
+# Create a project
+nebius iam project create --name "<name>" --parent-id <TENANT_ID> --format json
+
+# Get project details
+nebius iam project get --id <PROJECT_ID> --format json
 ```
 
 ## Service Accounts
 
-For CI/CD, automated tasks, and application access.
-
-Create service account:
 ```bash
+# Create service account
 nebius iam service-account create \
-  --name ci-deployer \
-  --description "GitHub Actions deployment"
-```
+  --name <sa-name> \
+  --parent-id <PROJECT_ID> \
+  --format json
 
-List service accounts:
-```bash
-nebius iam service-account list
-```
+# List service accounts
+nebius iam service-account list --format json
 
-## Access Keys
+# Generate auth key pair for service account
+nebius iam auth-public-key generate \
+  --parent-id <SERVICE_ACCOUNT_ID> \
+  --format json > sa-key.json
 
-Generate credentials for service account:
-
-```bash
+# Create access key
 nebius iam access-key create \
-  --service-account-id sa-xyz789
+  --parent-id <SERVICE_ACCOUNT_ID> \
+  --format json
 ```
 
-Returns:
-```
-Access Key ID: ak_abc123
-Secret Key: sk_xyz789... (shown only once)
-```
-
-**Store secret securely:**
-```bash
-# GitHub Secrets
-gh secret set NEBIUS_SECRET_KEY --body "sk_xyz789..."
-
-# Environment file
-echo "export NEBIUS_SECRET_KEY=sk_xyz789..." >> ~/.nebius/.env
-chmod 600 ~/.nebius/.env
-```
-
-List access keys:
-```bash
-nebius iam access-key list --service-account-id sa-xyz789
-```
-
-Delete key (revoke access):
-```bash
-nebius iam access-key delete --access-key-id ak_abc123
-```
-
-## Roles & Permissions
-
-### Built-in Roles
-
-| Role | Permissions |
-|------|------------|
-| `admin` | Full access to all resources |
-| `member` | Deploy and manage resources |
-| `developer` | Deploy endpoints/VMs only |
-| `viewer` | Read-only access |
-
-### Custom Roles
-
-Create custom role:
-```bash
-nebius iam role create \
-  --name deployment-operator \
-  --permissions \
-    "ai.endpoint.create" \
-    "ai.endpoint.describe" \
-    "ai.endpoint.delete"
-```
-
-Assign role to service account:
-```bash
-nebius iam role-binding create \
-  --service-account-id sa-xyz789 \
-  --role deployment-operator
-```
-
-## Resource-Level Access
-
-Restrict service account to specific resources:
+## Static Keys (for S3-compatible access)
 
 ```bash
-# Allow access only to specific project
-nebius iam role-binding create \
-  --service-account-id sa-xyz789 \
-  --role developer \
-  --resource-type project \
-  --resource-id my-project
+# Issue a static key (for Object Storage S3 access)
+nebius iam static-key issue \
+  --parent-id <SERVICE_ACCOUNT_ID> \
+  --format json
 ```
 
-## Group Management
+## Cross-Region Notes
 
-Create group:
-```bash
-nebius iam group create \
-  --name ml-team \
-  --description "Machine Learning team"
-```
+- Each region may require its own project
+- `nebius iam project list` is scoped to the active profile's parent
+- Use `--parent-id <TENANT_ID>` to see all projects across regions
+- Profiles should be region-specific for clarity
 
-Add member:
-```bash
-nebius iam group member add \
-  --group-id ml-team \
-  --user-id user-abc123
-```
+## Quick Reference Links
 
-Assign role to group:
-```bash
-nebius iam role-binding create \
-  --group-id ml-team \
-  --role developer
-```
-
-## Audit Logging
-
-View who accessed what:
-```bash
-nebius audit-log list \
-  --resource-type vm \
-  --action DELETE \
-  --since 2024-01-01
-```
-
-Common events:
-- `ResourceCreated`
-- `ResourceModified`
-- `ResourceDeleted`
-- `AccessKeyCreated`
-- `RoleBindingCreated`
-
-## Best Practices
-
-- ✅ Use service accounts for automation, not personal accounts
-- ✅ Rotate access keys every 90 days
-- ✅ Use least-privilege principle
-- ✅ Enable audit logging
-- ✅ Use groups to manage permissions at scale
-- ✅ Review access regularly
-- ❌ Don't share access keys
-- ❌ Don't commit credentials to git
-- ❌ Don't use admin role for routine operations
-
-## Federation (SAML/OIDC)
-
-Enable SSO for your organization:
-
-```bash
-nebius iam federation create \
-  --name my-saml \
-  --type saml \
-  --idp-url https://idp.example.com/saml
-```
-
-## Multi-Factor Authentication
-
-Enable MFA for user account:
-```bash
-nebius iam mfa enable
-```
-
-Requires TOTP authenticator app.
-
-## Troubleshooting
-
-**"Access denied"**
-```bash
-# Check your roles
-nebius iam whoami
-
-# Check service account permissions
-nebius iam role-binding list --service-account-id sa-xyz789
-```
-
-**Lost access key**
-```bash
-# Generate new key
-nebius iam access-key create --service-account-id sa-xyz789
-
-# Delete old key if compromised
-nebius iam access-key delete --access-key-id ak-old123
-```
-
-**Can't invite user**
-```bash
-# Check organization membership limits
-nebius organization describe
-
-# Verify email format
-# Ensure user domain is not blocked
-```
+- [CLI Configuration](https://docs.nebius.com/cli/configure)
+- [CLI Installation](https://docs.nebius.com/cli/install)
+- [CLI Quickstart](https://docs.nebius.com/cli/quickstart)
+- [gRPC API Auth](https://docs.nebius.com/grpc-api/auth)

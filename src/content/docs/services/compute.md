@@ -1,142 +1,160 @@
----
-title: Compute VMs
-description: Create virtual machines for training and development
----
+# Compute VM Reference
 
-Launch VMs with GPU support for model training, development, and long-running jobs.
+## Create Boot Disk
 
-## Quick Start
+Create a boot disk with a CUDA-enabled Ubuntu image:
 
 ```bash
-# Create H100 GPU VM
-nebius compute vm create \
-  --name my-training-vm \
-  --image-id ubuntu-22-04 \
-  --disk-size 200 \
-  --machine-type gpu-h100-sxm \
-  --ssh-key "$(cat ~/.ssh/nebius.pub)"
+nebius compute disk create \
+  --name <disk-name> \
+  --parent-id <PROJECT_ID> \
+  --type network_ssd \
+  --size-gibibytes 200 \
+  --block-size-bytes 4096 \
+  --source-image-family-image-family ubuntu22.04-cuda12 \
+  --format json
 ```
 
-Get the IP:
-```bash
-nebius compute vm describe --name my-training-vm \
-  --format json | jq -r '.networkInterfaces[0].primaryIpAddress'
-```
+### Available Image Families
 
-## Available GPUs
+| Family | Description | Min Disk Size |
+|---|---|---|
+| `ubuntu22.04-cuda12` | Ubuntu 22.04 with CUDA 12 (recommended for GPU) | **50 GiB** |
+| `ubuntu22.04` | Ubuntu 22.04 (CPU only) | 10 GiB |
 
-| Type | VRAM | Price/Hour | Best For |
-|------|------|-----------|----------|
-| H100 SXM | 80GB | $2.50 | Training, inference, general ML |
-| H200 SXM | 141GB | $3.50 | Large models, long sequences |
-| B200 SXM | 180GB | $4.00 | Cutting-edge models |
-| B300 SXM | 192GB | $4.50 | Frontier research |
-| L40S PCIe | 48GB | $0.80 | Cost-effective, lighter workloads |
+**Critical**: The `--source-image-family-image-family` flag has a double "image-family" — this is correct, not a typo. Using `--source-image-family` alone will fail.
 
-## Disk Options
+**Critical**: Disk type must use underscores: `network_ssd`, NOT `network-ssd`.
+
+## Create VM Instance
+
+### GPU VM (e.g., H200 for self-hosted inference)
 
 ```bash
-# SSD (fast, local)
---disk-type network-ssd --disk-size 200
-
-# Standard (slower, persistent)
---disk-type network-hdd --disk-size 500
+nebius compute instance create \
+  --name <vm-name> \
+  --parent-id <PROJECT_ID> \
+  --resources-platform gpu-h200-sxm \
+  --resources-preset 1gpu-16vcpu-200gb \
+  --boot-disk-attach-mode read_write \
+  --boot-disk-existing-disk-id <DISK_ID> \
+  --network-interfaces '[{
+    "name": "eth0",
+    "subnet_id": "<SUBNET_ID>",
+    "ip_address": {},
+    "public_ip_address": {}
+  }]' \
+  --cloud-init-user-data "$(cat cloud-init.yaml)" \
+  --format json
 ```
 
-Disks persist after VM shutdown and can be attached to new VMs.
+### Key Parameters
 
-## Connect via SSH
+| Parameter | Description |
+|---|---|
+| `--name` | VM name |
+| `--parent-id` | Project ID |
+| `--resources-platform` | GPU/CPU platform (see platforms table) |
+| `--resources-preset` | Resource allocation preset |
+| `--boot-disk-existing-disk-id` | ID of the boot disk to attach |
+| `--boot-disk-attach-mode` | `read_write` or `read_only` |
+| `--network-interfaces` | JSON array of network interfaces |
+| `--cloud-init-user-data` | Cloud-init configuration (string or file) |
+| `--gpu-cluster-id` | GPU cluster ID (for multi-GPU with InfiniBand) |
+| `--service-account-id` | Service account for VM API access |
+| `--preemptible-priority` | 1-5 priority for preemptible (cheaper) VMs |
+| `--stopped` | Create in stopped state (`true`/`false`) |
+
+### Cloud-Init Example
+
+```yaml
+#cloud-config
+users:
+  - name: user
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    shell: /bin/bash
+    ssh_authorized_keys:
+      - <YOUR_SSH_PUBLIC_KEY>
+
+package_update: true
+packages:
+  - docker.io
+  - jq
+
+runcmd:
+  - systemctl enable docker
+  - systemctl start docker
+```
+
+## Manage VMs
 
 ```bash
-# From creation, you have the IP
-IP="1.2.3.4"
+# List all instances
+nebius compute instance list --format json
 
-# SSH as nebius user
-ssh -i ~/.ssh/nebius nebius@$IP
+# Get instance details
+nebius compute instance get --id <INSTANCE_ID> --format json
 
-# Become root (passwordless)
-sudo su -
+# Stop instance (pauses billing)
+nebius compute instance stop --id <INSTANCE_ID>
+
+# Start instance
+nebius compute instance start --id <INSTANCE_ID>
+
+# Delete instance
+nebius compute instance delete --id <INSTANCE_ID>
 ```
 
-## Install Development Tools
+## GPU Clusters (for multi-GPU with InfiniBand)
 
 ```bash
-# On the VM
-sudo apt update
-sudo apt install -y python3-pip cuda-toolkit
+# Create GPU cluster
+nebius compute gpu-cluster create \
+  --name <cluster-name> \
+  --infiniband-fabric <fabric-name>
 
-# Install PyTorch
-pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+# List GPU clusters
+nebius compute gpu-cluster list --format json
 ```
 
-## GPU Monitoring
+## Disk Management
 
 ```bash
-# Check GPU status
-nvidia-smi
+# List disks
+nebius compute disk list --format json
 
-# Monitor continuously
-watch -n 1 nvidia-smi
-
-# Get temperature and power
-nvidia-smi --query-gpu=name,temperature.gpu,power.draw --format=csv -l 1
+# Delete disk
+nebius compute disk delete --id <DISK_ID>
 ```
 
-## Cost Optimization
-
-**Preemptible VMs** (experimental)
-```bash
-nebius compute vm create \
-  --name my-vm \
-  --preemptible \
-  --machine-type gpu-h100-sxm
-```
-
-Saves ~50% but can be interrupted with 2-minute notice.
-
-## Common Operations
-
-**Stop VM (preserve disk)**
-```bash
-nebius compute vm stop --name my-training-vm
-```
-
-**Restart VM**
-```bash
-nebius compute vm start --name my-training-vm
-```
-
-**Delete VM (keeps disk)**
-```bash
-nebius compute vm delete --name my-training-vm
-```
-
-**Delete VM and disk**
-```bash
-nebius compute vm delete --name my-training-vm --delete-disk
-```
-
-## Networking
-
-**Default:** VM gets private IP + optional public IP (limited quota).
+## Platform Discovery
 
 ```bash
-# Assign public IP
-nebius compute vm update --name my-training-vm --public-ip
-
-# Remove public IP
-nebius compute vm update --name my-training-vm --no-public-ip
+# List available platforms in current region
+nebius compute platform list --format json
 ```
 
-## Security
+## SSH Access
 
-- SSH port (22): Protected by key-based auth only
-- Access from your IP only: Configure security groups
-- No default password login: Keys required
+After VM creation, get the public IP and SSH in:
 
 ```bash
-# SSH from specific IP only
-nebius compute vm update \
-  --name my-training-vm \
-  --security-group ssh-from-office
+# Get public IP (strip the /32 CIDR suffix)
+PUBLIC_IP=$(nebius compute instance get --id <INSTANCE_ID> --format json \
+  | jq -r '.status.network_interfaces[0].public_ip_address.address' \
+  | cut -d/ -f1)
+
+# SSH to VM — username is "nebius" (NOT root, ubuntu, admin, or user)
+ssh nebius@${PUBLIC_IP}
+# Or if using cloud-init with a custom user:
+ssh <your-cloud-init-user>@${PUBLIC_IP}
 ```
+
+**Important**: The default SSH username on Nebius VMs and AI endpoints is `nebius`. Cloud-init can override this with a custom user.
+
+## Cost Considerations
+
+- GPU VMs are billed per hour while running. Always `stop` when not in use.
+- Use `--preemptible-priority` for cheaper preemptible instances (may be interrupted).
+- Boot disks are billed separately from compute. Delete disks when deleting VMs.
+- H200 > H100 in performance but also cost. Choose based on model size requirements.

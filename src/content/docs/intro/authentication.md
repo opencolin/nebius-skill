@@ -1,162 +1,93 @@
 ---
 title: Authentication
-description: Setup and manage Nebius credentials
+description: Setting up authentication for Nebius CLI and API access
 ---
 
-Nebius uses two types of authentication depending on your use case.
+## Overview
 
-## CLI Authentication
+To use Nebius services, you need to authenticate with the Nebius API. This guide covers setting up authentication for both the CLI and programmatic API access.
 
-For command-line operations with the Nebius CLI.
+## Nebius CLI Authentication
 
-### Step 1: Create Profile
+### 1. Create API Key
 
-```bash
-nebius profile create
-```
+Visit the [Nebius Console](https://console.nebius.com) and create an API key:
 
-This opens your browser for OAuth login. Once authenticated, it stores credentials locally at `~/.nebius/config`.
+1. Go to **Profile** → **API Keys**
+2. Click **Create API Key**
+3. Copy your API key securely
+4. Save it in a safe location
 
-### Step 2: Verify Authentication
-
-```bash
-nebius iam whoami
-```
-
-Expected output:
-```
-Email: user@example.com
-User ID: user-abc123
-Roles: member
-```
-
-## Token Factory API Keys
-
-For inference and programmatic access.
-
-### Generate API Key
+### 2. Set Environment Variable
 
 ```bash
-nebius iam service-account create --name "my-api-key"
+export NEBIUS_API_KEY="your-api-key"
 ```
 
-Returns:
-```
-Service Account ID: sa-xyz789
-API Key: nbc_xxx...
+Or add to your shell profile:
+
+```bash
+echo 'export NEBIUS_API_KEY="your-api-key"' >> ~/.zshrc
+source ~/.zshrc
 ```
 
-### Use in Code
+### 3. Verify Authentication
 
-**Python:**
+```bash
+nebius auth login
+nebius project list
+```
+
+## Programmatic Authentication
+
+For SDK/API usage:
+
 ```python
-import requests
+import nebius
 
-api_key = "nbc_xxx..."
-endpoint_ip = "1.2.3.4"
-
-response = requests.post(
-    f"http://{endpoint_ip}:8080/v1/chat/completions",
-    headers={"Authorization": f"Bearer {api_key}"},
-    json={"model": "gpt-4", "messages": [...]}
-)
+client = nebius.Client(api_key="your-api-key")
 ```
 
-**curl:**
-```bash
-curl -X POST http://1.2.3.4:8080/v1/chat/completions \
-  -H "Authorization: Bearer nbc_xxx..." \
-  -H "Content-Type: application/json" \
-  -d '{"model": "gpt-4", "messages": [...]}'
+```go
+package main
+
+import "github.com/nebius/go-sdk"
+
+client := nebius.NewClient("your-api-key")
 ```
 
-## SSH Key Setup
+## Token Factory Authentication
 
-For VM access.
-
-### Generate Key (macOS/Linux)
+Token Factory uses separate API keys:
 
 ```bash
-ssh-keygen -t ed25519 -f ~/.ssh/nebius -C "nebius"
+export TOKEN_FACTORY_API_KEY="your-token-factory-key"
 ```
 
-### Add to VM at Creation
+See [Token Factory Docs](https://nebius.ai/token-factory) for details.
 
-```bash
-nebius compute vm create \
-  --name my-vm \
-  --ssh-key "$(cat ~/.ssh/nebius.pub)"
-```
+## Security Best Practices
 
-### Connect to VM
-
-```bash
-ENDPOINT_IP="1.2.3.4"
-ssh -i ~/.ssh/nebius nebius@$ENDPOINT_IP
-```
-
-## Service Accounts (Advanced)
-
-For CI/CD and headless environments.
-
-### Create Service Account
-
-```bash
-nebius iam service-account create --name "ci-deployer"
-```
-
-### Generate Access Key
-
-```bash
-nebius iam access-key create --service-account-id sa-xyz789
-```
-
-Returns:
-```
-Access Key ID: ak_abc123
-Secret Key: sk_xyz789...
-```
-
-**Warning:** Secret keys are shown only once. Store securely.
-
-### Use in CI/CD
-
-**GitHub Actions:**
-```yaml
-env:
-  NEBIUS_ACCESS_KEY_ID: ${{ secrets.NEBIUS_KEY_ID }}
-  NEBIUS_SECRET_KEY: ${{ secrets.NEBIUS_SECRET_KEY }}
-
-run: nebius iam whoami
-```
-
-## Best Practices
-
-- ✅ Use service accounts for CI/CD, not personal credentials
-- ✅ Rotate API keys quarterly
-- ✅ Store secrets in environment variables, not files
-- ✅ Use Ed25519 SSH keys (more secure than RSA)
-- ✅ Restrict service account permissions to minimum required
+- **Never commit API keys** to version control
+- **Rotate keys regularly** through the Nebius Console
+- **Use different keys** for different environments
+- **Restrict key permissions** to only needed services
+- **Audit key usage** through activity logs
 
 ## Troubleshooting
 
-**"Invalid credentials"**
-```bash
-# Clear cached credentials
-rm -rf ~/.nebius/config
+### "Invalid API key"
 
-# Create new profile
-nebius profile create
+Verify your key is set correctly:
+
+```bash
+echo $NEBIUS_API_KEY
 ```
 
-**"Access denied"**
-Check service account permissions:
-```bash
-nebius iam service-account get --id sa-xyz789
-```
+### "Unauthorized"
 
-**SSH key rejected**
-Ensure key format is correct:
-```bash
-ssh-keygen -l -f ~/.ssh/nebius.pub
-```
+Check key permissions in the Nebius Console.
+
+### "Key expired"
+
+Generate a new API key and update your environment.

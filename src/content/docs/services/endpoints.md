@@ -1,112 +1,144 @@
----
-title: Serverless AI Endpoints
-description: Deploy ML models and agents with auto-scaling
----
+# Serverless AI Endpoints Reference
 
-Deploy inference endpoints with automatic scaling and zero DevOps overhead.
+## Create Endpoint
 
-## Quick Deploy
+### CPU-only (with remote inference via Token Factory)
+
+Best for agent/orchestration workloads that don't need local GPU:
+
+```bash
+WEB_PASSWORD=$(openssl rand -base64 24)
+nebius ai endpoint create \
+  --name "<endpoint-name>" \
+  --image "<REGISTRY_IMAGE>" \
+  --platform cpu-e2 \
+  --container-port 8080 \
+  --container-port 18789 \
+  --env "TOKEN_FACTORY_API_KEY=<key>" \
+  --env "TOKEN_FACTORY_URL=<TOKEN_FACTORY_URL>" \
+# EU: https://api.tokenfactory.nebius.com/v1
+# US (us-central1): https://api.tokenfactory.us-central1.nebius.com/v1
+  --env "INFERENCE_MODEL=<model-name>" \
+  --env "OPENCLAW_WEB_PASSWORD=${WEB_PASSWORD}" \
+  --public
+# Dashboard URL: http://<PUBLIC_IP>:18789/#token=${WEB_PASSWORD}&gatewayUrl=ws://<PUBLIC_IP>:18789
+```
+
+**Note**: Multiple `--container-port` flags are supported. Port 8080 is the health check, port 18789 is the OpenClaw dashboard.
+
+### GPU (self-hosted inference)
+
+For running models locally on GPU:
 
 ```bash
 nebius ai endpoint create \
-  --name my-endpoint \
+  --name "<endpoint-name>" \
+  --image "<REGISTRY_IMAGE>" \
   --platform gpu-h100-sxm \
-  --image-uri gcr.io/my-project/my-model:latest
+  --preset 1gpu-16vcpu-200gb \
+  --container-port 8080 \
+  --disk-size 100Gi \
+  --shm-size 16Gi \
+  --env "INFERENCE_MODEL=<model-name>" \
+  --public \
+  --auth token \
+  --token "<auth-token>" \
+  --subnet-id <SUBNET_ID>
 ```
 
-Monitor deployment:
-```bash
-nebius ai endpoint describe --name my-endpoint
-```
-
-## Supported Platforms
-
-| Platform | GPU | VRAM | Best For |
-|----------|-----|------|----------|
-| `gpu-h100-sxm` | H100 | 80GB | General inference, code generation |
-| `gpu-h200-sxm` | H200 | 141GB | Large models, long context |
-| `gpu-b200-sxm` | B200 | 180GB | Next-gen models |
-| `cpu-e2` | CPU | 8GB | Light workloads, testing |
-
-## Inference Request
-
-Once endpoint is `RUNNING`:
+### With vLLM for LLM inference
 
 ```bash
-ENDPOINT_IP=$(nebius ai endpoint describe --name my-endpoint \
-  --format json | jq -r '.status.ip')
-
-curl -X POST http://$ENDPOINT_IP:8080/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "gpt-4",
-    "messages": [{"role": "user", "content": "Hello"}],
-    "max_tokens": 100
-  }'
+nebius ai endpoint create \
+  --name qs-vllm-chat \
+  --image vllm/vllm-openai:latest \
+  --container-command "python3 -m vllm.entrypoints.openai.api_server" \
+  --args "--model <MODEL_ID> --host 0.0.0.0 --port 8000" \
+  --platform gpu-l40s-a \
+  --preset 1gpu-8vcpu-32gb \
+  --public \
+  --container-port 8000 \
+  --auth token \
+  --token "<AUTH_TOKEN>" \
+  --shm-size 16Gi
 ```
 
-## Scaling
+## Key Parameters
 
-Endpoints scale automatically based on load. Configure scaling bounds:
+| Parameter | Description |
+|---|---|
+| `--name` | Human-readable endpoint name |
+| `--image` | Docker image (from Nebius registry or public) |
+| `--platform` | GPU/CPU platform (see GPU platforms table) |
+| `--preset` | Resource allocation (e.g., `1gpu-16vcpu-200gb`) |
+| `--container-port` | Port your container listens on (repeatable for multiple ports) |
+| `--container-command` | Override container entrypoint |
+| `--args` | Arguments to the container command |
+| `--disk-size` | Persistent disk size (e.g., `100Gi`) |
+| `--shm-size` | Shared memory size (e.g., `16Gi`, important for PyTorch) |
+| `--env` | Environment variables (repeatable) |
+| `--public` | Expose a public URL |
+| `--auth token` | Require auth token for access |
+| `--token` | Set the auth token value |
+| `--subnet-id` | VPC subnet for private networking |
+
+## Manage Endpoints
 
 ```bash
-nebius ai endpoint update \
-  --name my-endpoint \
-  --min-replicas 1 \
-  --max-replicas 10 \
-  --target-cpu-utilization 70
+# List all endpoints
+nebius ai endpoint list --format json
+
+# Get endpoint details
+nebius ai endpoint get <ENDPOINT_ID> --format json
+
+# Get endpoint by name
+nebius ai endpoint get-by-name <endpoint-name> --format json
+
+# View logs
+nebius ai endpoint logs <ENDPOINT_ID>
+nebius ai endpoint logs <ENDPOINT_ID> --follow --since 5m --timestamps
+
+# Stop endpoint (pauses billing)
+nebius ai endpoint stop <ENDPOINT_ID>
+
+# Start endpoint (resume)
+nebius ai endpoint start <ENDPOINT_ID>
+
+# Delete endpoint
+nebius ai endpoint delete <ENDPOINT_ID>
 ```
 
-## Cost Management
-
-**Pay per replica per hour:**
-- H100: $2.50/hour
-- CPU: $0.10/hour
-
-**Tip:** Use `min-replicas: 0` to scale to zero when idle.
+## Update Endpoint
 
 ```bash
-nebius ai endpoint update \
-  --name my-endpoint \
-  --min-replicas 0 \
-  --max-replicas 5
+# Update environment variables
+nebius ai endpoint update <ENDPOINT_ID> --env "INFERENCE_MODEL=new-model"
+
+# Update image
+nebius ai endpoint update <ENDPOINT_ID> --image <new-image>
 ```
 
-## Health Checks
+## Polling for Ready State
 
-Endpoints include built-in health monitoring:
+After creating an endpoint, poll until it's ready:
 
 ```bash
-# Health status
-curl http://$ENDPOINT_IP:8080/health
-
-# Metrics
-curl http://$ENDPOINT_IP:8888/metrics
+while true; do
+  STATUS=$(nebius ai endpoint get <ENDPOINT_ID> --format json | jq -r '.status.state')
+  echo "Status: $STATUS"
+  if [ "$STATUS" = "RUNNING" ]; then
+    echo "Endpoint is ready!"
+    URL=$(nebius ai endpoint get <ENDPOINT_ID> --format json | jq -r '.status.url')
+    echo "URL: $URL"
+    break
+  fi
+  sleep 10
+done
 ```
 
-## Limits
+## Cost Considerations
 
-- Max request size: 100MB
-- Max response time: 5 minutes
-- Max concurrent requests: 100 per replica
-- Startup time: 1-2 minutes
-
-## Common Issues
-
-**Endpoint stuck in CREATING**
-```bash
-# Check logs
-nebius ai endpoint logs --name my-endpoint --lines 50
-
-# Restart if necessary
-nebius ai endpoint restart --name my-endpoint
-```
-
-**Out of memory during inference**
-- Reduce batch size
-- Use smaller model
-- Scale to more replicas
-
-**Network timeout**
-- Increase timeout: `--request-timeout 300s`
-- Check endpoint health: `curl http://$IP:8080/health`
+- **CPU-only (`cpu-e2`)**: Cheapest option. Use for orchestration/agent workloads with remote inference.
+- **GPU endpoints**: Billed per GPU-hour while running. Always `stop` when not in use.
+- **`--public`**: Creates a public URL. Omit for internal-only access.
+- **`--auth token`**: Strongly recommended for public endpoints to prevent unauthorized access.
